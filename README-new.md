@@ -68,7 +68,26 @@ source scripts/setup_eval_env.sh
 
 성공 시 사내 설정값 요약이 출력된다.
 
-### 5. 파일럿 실행 (5개 문제로 설정 검증)
+### 5. SWE-bench Docker 이미지 사전 pull (선택, 권장)
+
+평가 실행 전에 필요한 이미지를 미리 받아두면 평가 중 네트워크 오류로 인한 실패를 예방할 수 있다.
+
+```bash
+python3 - <<'EOF'
+import json, subprocess
+instances = [json.loads(l) for l in open("data/swebench_lite_test2.jsonl")]
+for inst in instances:
+    iid = inst["instance_id"].replace("__", "_1776_")
+    image = f"docker.io/swebench/sweb.eval.x86_64.{iid}:latest".lower()
+    print(f"Pulling {image} ...")
+    subprocess.run(["docker", "pull", image], check=False)
+EOF
+```
+
+> Docker Hub 접근이 불가한 경우 사내 Docker Registry 에 이미지를 미러링해야 한다.
+> 미러링 후 `swebench_internal.yaml` 의 `environment.image` 에 내부 레지스트리 주소를 지정한다.
+
+### 6. 파일럿 실행 (5개 문제로 설정 검증)
 
 ```bash
 mini-extra swebench \
@@ -87,7 +106,7 @@ tail -f results/pilot/minisweagent.log
 
 `[corp-setup] Corporate environment configured.` 메시지가 보이면 컨테이너 환경 설정 성공.
 
-### 6. 본 평가 실행 (50개 전체)
+### 7. 본 평가 실행 (50개 전체)
 
 ```bash
 mini-extra swebench \
@@ -100,7 +119,7 @@ mini-extra swebench \
 
 중단 후 재개 시 동일 명령을 재실행하면 완료된 문제는 건너뛴다.
 
-### 7. 채점
+### 8. 채점
 
 ```bash
 python -m swebench.harness.run_evaluation \

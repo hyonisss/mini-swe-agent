@@ -233,11 +233,19 @@ def main(
     logger.info(f"Results will be saved to {output_path}")
     add_file_handler(output_path / "minisweagent.log")
 
-    from datasets import load_dataset
-
     dataset_path = DATASET_MAPPING.get(subset, subset)
     logger.info(f"Loading dataset {dataset_path}, split {split}...")
-    instances = list(load_dataset(dataset_path, split=split))
+    if dataset_path.endswith(".jsonl") and Path(dataset_path).exists():
+        instances = [json.loads(line) for line in Path(dataset_path).read_text().splitlines() if line.strip()]
+        logger.info(f"Loaded {len(instances)} instances from local JSONL file (split '{split}' ignored)")
+    elif Path(dataset_path).exists():
+        from datasets import load_from_disk
+
+        instances = list(load_from_disk(dataset_path)[split])
+    else:
+        from datasets import load_dataset
+
+        instances = list(load_dataset(dataset_path, split=split))
 
     instances = filter_instances(instances, filter_spec=filter_spec, slice_spec=slice_spec, shuffle=shuffle)
     if not redo_existing and (output_path / "preds.json").exists():

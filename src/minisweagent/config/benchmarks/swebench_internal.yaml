@@ -1,0 +1,32 @@
+# Config for evaluating an in-house / corporate LLM on SWE-bench Lite.
+# Inherits all agent/environment settings from swebench.yaml and overrides only
+# the model section to point at the internal endpoint.
+#
+# Usage:
+#   mini-extra swebench \
+#     -c swebench.yaml \
+#     -c swebench_internal.yaml \
+#     --subset /data/swebench_lite \
+#     --split dev \
+#     -o ./results/my-model \
+#     -w 4
+#
+# You can also override individual values on the CLI:
+#   ... -c "model.model_kwargs.api_key=sk-xxxx"
+#   ... -c "model.model_kwargs.temperature=0.2"
+
+model:
+  # Use litellm's openai-compatible interface.
+  # Adjust the model name to match what your internal server serves.
+  # Examples:
+  #   "openai/your-model-name"   → OpenAI-compatible endpoint
+  #   "huggingface/your-model"   → HuggingFace Inference Endpoints
+  model_name: "openai/your-internal-model-name"
+
+  model_kwargs:
+    # Base URL of your internal LLM endpoint (OpenAI-compatible /v1 API).
+    api_base: "http://your-internal-llm-host/v1"
+    # Set via env var instead of hardcoding:  export INTERNAL_LLM_API_KEY=...
+    api_key: "${INTERNAL_LLM_API_KEY}"
+    temperature: 0.0
+    drop_params: true

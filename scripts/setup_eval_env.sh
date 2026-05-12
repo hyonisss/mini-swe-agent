@@ -52,6 +52,8 @@ declare -a REQUIRED_VARS=(
     HTTPS_PROXY
     NO_PROXY
     CORP_CA_BUNDLE_PATH
+    PIP_INDEX_URL
+    PIP_TRUSTED_HOST
 )
 
 declare -a MISSING=()
@@ -103,9 +105,12 @@ echo "[setup] .venv 활성화 ..."
 source "${VENV_DIR}/bin/activate"
 
 # ---------------------------------------------------------------------------
-# 5. pip 에 CA 인증서 설정 (HTTPS_PROXY 는 환경변수로 자동 적용)
+# 5. pip 환경변수 설정
 # ---------------------------------------------------------------------------
 export PIP_CERT="${CORP_CA_BUNDLE_PATH}"
+export PIP_INDEX_URL="${PIP_INDEX_URL}"
+export PIP_TRUSTED_HOST="${PIP_TRUSTED_HOST}"
+# HTTPS_PROXY 는 환경변수로 자동 적용됨
 
 # ---------------------------------------------------------------------------
 # 6. 패키지 설치
@@ -128,6 +133,8 @@ echo " LLM 모델   : ${INTERNAL_LLM_MODEL_NAME}"
 echo " LLM 주소   : ${INTERNAL_LLM_API_BASE}"
 echo " 프록시     : ${HTTP_PROXY}"
 echo " CA 번들    : ${CORP_CA_BUNDLE_PATH}"
+echo " pip 인덱스 : ${PIP_INDEX_URL}"
+echo " pip 신뢰호스트: ${PIP_TRUSTED_HOST}"
 echo "----------------------------------------------------------------"
 echo " 파일럿 실행 (5개 인스턴스):"
 echo "   mini-extra swebench \\"

@@ -45,6 +45,8 @@ environment:
     - DEBIAN_APT_MIRROR
     - DEBIAN_SECURITY_MIRROR
     - NPM_REGISTRY
+    - PIP_INDEX_URL
+    - PIP_TRUSTED_HOST
 
   # run_args: docker run 에 전달할 추가 인자
   # ${CORP_CA_BUNDLE_PATH} 는 DockerEnvironmentConfig._expand_run_args 가
@@ -109,6 +111,12 @@ run:
     fi
     if [ -n "${HTTPS_PROXY:-}" ]; then
       pip config --global set global.proxy "${HTTPS_PROXY}" >/dev/null 2>&1 || true
+    fi
+    if [ -n "${PIP_INDEX_URL:-}" ]; then
+      pip config --global set global.index-url "${PIP_INDEX_URL}" >/dev/null 2>&1 || true
+    fi
+    if [ -n "${PIP_TRUSTED_HOST:-}" ]; then
+      pip config --global set global.trusted-host "${PIP_TRUSTED_HOST}" >/dev/null 2>&1 || true
     fi
 
     # -- 4. git 설정 ------------------------------------------------------------

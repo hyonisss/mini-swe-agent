@@ -227,10 +227,18 @@ wc -l data/swebench_lite_test2.jsonl
 ### 4-4. SWE-bench Docker 이미지 사전 pull (선택)
 
 각 문제 실행 시 자동으로 pull되지만, 사내 네트워크 속도가 느릴 경우 미리 받아두면 좋다.
+아래 명령으로 데이터셋의 50개 인스턴스에 해당하는 이미지를 한 번에 pull한다.
 
 ```bash
-# 예시: requests 관련 이미지
-docker pull swebench/sweb.eval.x86_64.psf_1776_requests-863:latest
+python3 - <<'EOF'
+import json, subprocess
+instances = [json.loads(l) for l in open("data/swebench_lite_test2.jsonl")]
+for inst in instances:
+    iid = inst["instance_id"].replace("__", "_1776_")
+    image = f"docker.io/swebench/sweb.eval.x86_64.{iid}:latest".lower()
+    print(f"Pulling {image} ...")
+    subprocess.run(["docker", "pull", image], check=False)
+EOF
 ```
 
 사내 Docker Registry에 미러링이 필요한 경우 `swebench_internal.yaml`의 `environment` 섹션에 커스텀 레지스트리 주소를 추가한다.

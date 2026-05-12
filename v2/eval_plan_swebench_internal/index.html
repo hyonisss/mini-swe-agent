@@ -3195,9 +3195,17 @@ wc<span class="w"> </span>-l<span class="w"> </span>data/swebench_lite_test2.jso
 <span class="c1"># 예상 출력: 50 data/swebench_lite_test2.jsonl</span>
 </code></pre></div>
 <h3 id="4-4-swe-bench-docker-pull">4-4. SWE-bench Docker 이미지 사전 pull (선택)</h3>
-<p>각 문제 실행 시 자동으로 pull되지만, 사내 네트워크 속도가 느릴 경우 미리 받아두면 좋다.</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># 예시: requests 관련 이미지</span>
-docker<span class="w"> </span>pull<span class="w"> </span>swebench/sweb.eval.x86_64.psf_1776_requests-863:latest
+<p>각 문제 실행 시 자동으로 pull되지만, 사내 네트워크 속도가 느릴 경우 미리 받아두면 좋다.
+아래 명령으로 데이터셋의 50개 인스턴스에 해당하는 이미지를 한 번에 pull한다.</p>
+<div class="highlight"><pre><span></span><code>python3<span class="w"> </span>-<span class="w"> </span><span class="s">&lt;&lt;'EOF'</span>
+<span class="s">import json, subprocess</span>
+<span class="s">instances = [json.loads(l) for l in open("data/swebench_lite_test2.jsonl")]</span>
+<span class="s">for inst in instances:</span>
+<span class="s">    iid = inst["instance_id"].replace("__", "_1776_")</span>
+<span class="s">    image = f"docker.io/swebench/sweb.eval.x86_64.{iid}:latest".lower()</span>
+<span class="s">    print(f"Pulling {image} ...")</span>
+<span class="s">    subprocess.run(["docker", "pull", image], check=False)</span>
+<span class="s">EOF</span>
 </code></pre></div>
 <p>사내 Docker Registry에 미러링이 필요한 경우 <code>swebench_internal.yaml</code>의 <code>environment</code> 섹션에 커스텀 레지스트리 주소를 추가한다.</p>
 <hr>

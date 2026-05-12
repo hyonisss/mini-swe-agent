@@ -17,7 +17,16 @@ git clone https://github.com/hyonisss/mini-swe-agent.git
 cd mini-swe-agent
 ```
 
-### 2. 환경변수 파일 작성
+### 2. 초기 설치 (최초 1회)
+
+```bash
+pip install -e .
+pip install swebench
+```
+
+> 사내 네트워크에서 SSL 오류가 발생하면 `pip install --cert /path/to/corp-ca.pem -e .` 로 실행한다.
+
+### 3. 환경변수 파일 작성 (최초 1회)
 
 ```bash
 cp .env.example .env
@@ -46,22 +55,20 @@ NPM_REGISTRY=https://<내부-npm-레지스트리>
 CORP_CA_BUNDLE_PATH=/etc/ssl/certs/<사내-CA-번들>.pem
 ```
 
-### 3. 셋업 스크립트 실행
+> `.env` 에 설정하는 값들은 평가 실행 시 Docker 컨테이너 내부로 전달되어
+> 컨테이너 안에서 apt, pip, git, npm 이 사내 환경을 사용하도록 설정된다.
 
-> **반드시 `source` 로 실행** (`bash` 로 실행하면 환경변수가 현재 셸에 유지되지 않음)
+### 4. 사내 환경변수 로드 (매 세션마다)
+
+> **반드시 `source` 로 실행** (`bash` 로 실행하면 현재 셸에 export 되지 않음)
 
 ```bash
 source scripts/setup_eval_env.sh
 ```
 
-이 명령 하나로 아래가 자동 완료된다.
-- `.env` 유효성 검사
-- Docker 데몬 동작 확인
-- `.venv/` 생성 및 활성화
-- `pip install -e .` (mini-swe-agent)
-- `pip install swebench` (채점 harness)
+성공 시 사내 설정값 요약이 출력된다.
 
-### 4. 파일럿 실행 (5개 문제로 설정 검증)
+### 5. 파일럿 실행 (5개 문제로 설정 검증)
 
 ```bash
 mini-extra swebench \
@@ -80,7 +87,7 @@ tail -f results/pilot/minisweagent.log
 
 `[corp-setup] Corporate environment configured.` 메시지가 보이면 컨테이너 환경 설정 성공.
 
-### 5. 본 평가 실행 (50개 전체)
+### 6. 본 평가 실행 (50개 전체)
 
 ```bash
 mini-extra swebench \
@@ -93,7 +100,7 @@ mini-extra swebench \
 
 중단 후 재개 시 동일 명령을 재실행하면 완료된 문제는 건너뛴다.
 
-### 6. 채점
+### 7. 채점
 
 ```bash
 python -m swebench.harness.run_evaluation \

@@ -1,32 +1,135 @@
-# Config for evaluating an in-house / corporate LLM on SWE-bench Lite.
-# Inherits all agent/environment settings from swebench.yaml and overrides only
-# the model section to point at the internal endpoint.
+# 사내 환경에서 SWE-bench Lite 평가를 위한 설정
 #
-# Usage:
+# swebench.yaml 의 agent 설정을 그대로 상속하고,
+# model / environment / run 섹션만 사내 환경에 맞게 오버라이드한다.
+#
+# 사전 조건:
+#   source scripts/setup_eval_env.sh   # .env 로드 + venv 활성화
+#
+# 실행:
 #   mini-extra swebench \
 #     -c swebench.yaml \
 #     -c swebench_internal.yaml \
-#     --subset /data/swebench_lite \
-#     --split dev \
-#     -o ./results/my-model \
-#     -w 4
-#
-# You can also override individual values on the CLI:
-#   ... -c "model.model_kwargs.api_key=sk-xxxx"
-#   ... -c "model.model_kwargs.temperature=0.2"
+#     --subset ./data/swebench_lite_test2.jsonl \
+#     --slice 0:5 \
+#     -o ./results/pilot \
+#     -w 1
 
+# ---------------------------------------------------------------------------
+# Model — 사내 LLM 엔드포인트
+# ---------------------------------------------------------------------------
+# ${VAR} 는 litellm 이 호스트 환경변수에서 확장한다.
+# setup_eval_env.sh 실행 후에는 모든 변수가 export 된 상태이다.
 model:
-  # Use litellm's openai-compatible interface.
-  # Adjust the model name to match what your internal server serves.
-  # Examples:
-  #   "openai/your-model-name"   → OpenAI-compatible endpoint
-  #   "huggingface/your-model"   → HuggingFace Inference Endpoints
-  model_name: "openai/your-internal-model-name"
-
+  model_name: "${INTERNAL_LLM_MODEL_NAME}"
   model_kwargs:
-    # Base URL of your internal LLM endpoint (OpenAI-compatible /v1 API).
-    api_base: "http://your-internal-llm-host/v1"
-    # Set via env var instead of hardcoding:  export INTERNAL_LLM_API_KEY=...
+    api_base: "${INTERNAL_LLM_API_BASE}"
     api_key: "${INTERNAL_LLM_API_KEY}"
     temperature: 0.0
     drop_params: true
+
+# ---------------------------------------------------------------------------
+# Environment — 사내 Docker 설정
+# ---------------------------------------------------------------------------
+environment:
+  # forward_env: 호스트 환경변수를 docker exec -e 로 컨테이너에 주입
+  # 변수가 호스트에 설정된 경우에만 전달됨 (미설정 시 무시)
+  forward_env:
+    - HTTP_PROXY
+    - HTTPS_PROXY
+    - NO_PROXY
+    - http_proxy
+    - https_proxy
+    - no_proxy
+    - UBUNTU_APT_MIRROR
+    - DEBIAN_APT_MIRROR
+    - DEBIAN_SECURITY_MIRROR
+    - NPM_REGISTRY
+
+  # run_args: docker run 에 전달할 추가 인자
+  # ${CORP_CA_BUNDLE_PATH} 는 DockerEnvironmentConfig._expand_run_args 가
+  # os.path.expandvars 로 확장한다 (setup_eval_env.sh 실행 후 유효).
+  # CA 파일이 컨테이너 내 /run/corp-ca.pem 에 읽기 전용으로 마운트된다.
+  run_args:
+    - "--rm"
+    - "-v"
+    - "${CORP_CA_BUNDLE_PATH}:/run/corp-ca.pem:ro"
+
+# ---------------------------------------------------------------------------
+# Run — 컨테이너 시작 직후 실행할 셋업 커맨드
+# ---------------------------------------------------------------------------
+# 주의: 이 커맨드는 Jinja2 Template(**instance) 로 렌더링되지만,
+#       ${VAR} 셸 문법은 Jinja2 가 건드리지 않는다.
+#       forward_env 로 전달된 변수를 bash 가 확장하므로
+#       ${HTTP_PROXY} 등을 그대로 참조할 수 있다.
+run:
+  env_startup_command: |
+    set -euo pipefail
+
+    # -- 1. apt 미러 교체 -------------------------------------------------------
+    if [ -n "${UBUNTU_APT_MIRROR:-}" ]; then
+      if [ -f /etc/apt/sources.list ]; then
+        sed -i \
+          -e "s|http://archive.ubuntu.com/ubuntu|${UBUNTU_APT_MIRROR}|g" \
+          -e "s|http://security.ubuntu.com/ubuntu|${UBUNTU_APT_MIRROR}|g" \
+          /etc/apt/sources.list
+      fi
+      find /etc/apt/sources.list.d -maxdepth 1 -name '*.list' \
+        -exec sed -i "s|http://archive.ubuntu.com/ubuntu|${UBUNTU_APT_MIRROR}|g" {} \; \
+        2>/dev/null || true
+    fi
+
+    if [ -n "${DEBIAN_APT_MIRROR:-}" ]; then
+      if [ -f /etc/apt/sources.list ]; then
+        sed -i "s|http://deb.debian.org/debian|${DEBIAN_APT_MIRROR}|g" /etc/apt/sources.list
+      fi
+    fi
+
+    if [ -n "${DEBIAN_SECURITY_MIRROR:-}" ]; then
+      if [ -f /etc/apt/sources.list ]; then
+        sed -i "s|http://security.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}|g" /etc/apt/sources.list
+      fi
+    fi
+
+    # -- 2. 사내 CA 인증서 설치 -------------------------------------------------
+    if [ -f /run/corp-ca.pem ]; then
+      if command -v update-ca-certificates >/dev/null 2>&1; then
+        cp /run/corp-ca.pem /usr/local/share/ca-certificates/corp-ca.crt
+        update-ca-certificates --fresh >/dev/null 2>&1 || true
+      fi
+      if command -v update-ca-trust >/dev/null 2>&1; then
+        cp /run/corp-ca.pem /etc/pki/ca-trust/source/anchors/corp-ca.pem
+        update-ca-trust extract >/dev/null 2>&1 || true
+      fi
+    fi
+
+    # -- 3. pip 설정 ------------------------------------------------------------
+    if [ -f /run/corp-ca.pem ]; then
+      pip config --global set global.cert /run/corp-ca.pem >/dev/null 2>&1 || true
+    fi
+    if [ -n "${HTTPS_PROXY:-}" ]; then
+      pip config --global set global.proxy "${HTTPS_PROXY}" >/dev/null 2>&1 || true
+    fi
+
+    # -- 4. git 설정 ------------------------------------------------------------
+    if [ -f /run/corp-ca.pem ]; then
+      git config --global http.sslCAInfo /run/corp-ca.pem || true
+    fi
+    if [ -n "${HTTPS_PROXY:-}" ]; then
+      git config --global http.proxy "${HTTPS_PROXY}" || true
+    fi
+    if [ -n "${NO_PROXY:-}" ]; then
+      git config --global http.noProxy "${NO_PROXY}" || true
+    fi
+
+    # -- 5. npm 설정 (있을 때만) ------------------------------------------------
+    if command -v npm >/dev/null 2>&1; then
+      if [ -n "${NPM_REGISTRY:-}" ]; then
+        npm config set registry "${NPM_REGISTRY}" 2>/dev/null || true
+      fi
+      if [ -f /run/corp-ca.pem ]; then
+        npm config set cafile /run/corp-ca.pem 2>/dev/null || true
+      fi
+    fi
+
+    echo "[corp-setup] Corporate environment configured."

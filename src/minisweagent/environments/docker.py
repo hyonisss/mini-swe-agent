@@ -6,7 +6,7 @@ import subprocess
 import uuid
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from minisweagent.exceptions import Submitted
 from minisweagent.utils.serialize import recursive_merge
@@ -40,6 +40,12 @@ class DockerEnvironmentConfig(BaseModel):
     The actual command will be appended as argument to this. Override this to e.g., modify shell flags
     (e.g., to remove the `-l` flag to disable login shell) or to use python instead of bash to interpret commands.
     """
+
+    @model_validator(mode="after")
+    def _expand_run_args(self) -> "DockerEnvironmentConfig":
+        """Expand ${VAR} references in run_args using the host environment."""
+        self.run_args = [os.path.expandvars(arg) for arg in self.run_args]
+        return self
 
 
 class DockerEnvironment:

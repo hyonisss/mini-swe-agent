@@ -2568,6 +2568,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#35" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.5. 사내 네트워크 환경 설정
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3.5. 사내 네트워크 환경 설정">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        설정 흐름
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        설정 절차
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#4" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2594,7 +2633,7 @@
   <a href="#4-2-llm" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4-2. 사내 LLM 설정
+        4-2. 사내 LLM 및 네트워크 설정
       
     </span>
   </a>
@@ -2992,7 +3031,15 @@ PASS_TO_PASS       : 기존 통과 상태를 유지해야 하는 테스트
 </tr>
 <tr>
 <td><code>src/minisweagent/config/benchmarks/swebench_internal.yaml</code></td>
-<td>사내 LLM 엔드포인트 오버라이드</td>
+<td>사내 LLM + Docker 환경 오버라이드</td>
+</tr>
+<tr>
+<td><code>.env.example</code> → <code>.env</code></td>
+<td>사내 환경변수 템플릿 (<code>.env</code>는 gitignore)</td>
+</tr>
+<tr>
+<td><code>scripts/setup_eval_env.sh</code></td>
+<td>호스트 셋업 자동화 스크립트</td>
 </tr>
 <tr>
 <td><code>data/swebench_lite_test2.jsonl</code></td>
@@ -3001,27 +3048,145 @@ PASS_TO_PASS       : 기존 통과 상태를 유지해야 하는 테스트
 </tbody>
 </table>
 <hr>
+<h2 id="35">3.5. 사내 네트워크 환경 설정</h2>
+<p>사내 네트워크에서 평가를 실행하면 Docker 컨테이너 내부에서 pip, apt, git 작업이 실패할 수 있다. 원인과 해결 방법:</p>
+<table>
+<thead>
+<tr>
+<th>문제</th>
+<th>원인</th>
+<th>해결</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>pip/apt SSL 오류</td>
+<td>사내 CA 인증서 없음</td>
+<td>CA 파일을 컨테이너에 볼륨 마운트 후 설치</td>
+</tr>
+<tr>
+<td>외부 패키지 서버 접근 불가</td>
+<td>방화벽/프록시</td>
+<td>내부 미러로 apt sources.list 교체</td>
+</tr>
+<tr>
+<td>git clone 실패</td>
+<td>프록시 미설정</td>
+<td><code>HTTP_PROXY</code> 등을 컨테이너에 forward</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_6">설정 흐름</h3>
+<div class="highlight"><pre><span></span><code>.env.example ──copy──&gt; .env ──source──&gt; setup_eval_env.sh
+                                              │
+                                 ┌────────────┴─────────────┐
+                                 │ 환경변수 export            │
+                                 │ .venv 생성/활성화          │
+                                 │ pip install mini-swe-agent │
+                                 │ pip install swebench       │
+                                 └────────────┬─────────────┘
+                                              │
+                                   mini-extra swebench 실행
+                                              │
+                         ┌────────────────────┴───────────────────┐
+                         │ docker run                              │
+                         │   -v $CORP_CA_BUNDLE_PATH:/run/corp-ca.pem:ro │
+                         └────────────────────┬───────────────────┘
+                                              │
+                         ┌────────────────────┴───────────────────┐
+                         │ docker exec (env_startup_command)       │
+                         │   apt sources.list → 내부 미러 교체      │
+                         │   CA cert 설치 (update-ca-certificates) │
+                         │   pip / git / npm 설정                  │
+                         └────────────────────────────────────────┘
+</code></pre></div>
+<h3 id="_7">설정 절차</h3>
+<p><strong>Step A: <code>.env</code> 파일 생성</strong></p>
+<div class="highlight"><pre><span></span><code>cp<span class="w"> </span>.env.example<span class="w"> </span>.env
+</code></pre></div>
+<p><code>.env</code>를 열어 아래 항목을 실제 사내 값으로 채운다.</p>
+<table>
+<thead>
+<tr>
+<th>변수</th>
+<th>설명</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>INTERNAL_LLM_MODEL_NAME</code></td>
+<td>사내 LLM 모델명 (예: <code>openai/llama-3.1-70b</code>)</td>
+</tr>
+<tr>
+<td><code>INTERNAL_LLM_API_BASE</code></td>
+<td>OpenAI 호환 엔드포인트 URL</td>
+</tr>
+<tr>
+<td><code>INTERNAL_LLM_API_KEY</code></td>
+<td>API 키 (불필요 시 <code>none</code>)</td>
+</tr>
+<tr>
+<td><code>HTTP_PROXY</code> / <code>HTTPS_PROXY</code> / <code>NO_PROXY</code></td>
+<td>사내 프록시</td>
+</tr>
+<tr>
+<td><code>UBUNTU_APT_MIRROR</code></td>
+<td>내부 Ubuntu apt 미러 URL</td>
+</tr>
+<tr>
+<td><code>DEBIAN_APT_MIRROR</code></td>
+<td>내부 Debian apt 미러 URL</td>
+</tr>
+<tr>
+<td><code>DEBIAN_SECURITY_MIRROR</code></td>
+<td>내부 Debian security 미러 URL</td>
+</tr>
+<tr>
+<td><code>NPM_REGISTRY</code></td>
+<td>내부 npm 레지스트리 URL</td>
+</tr>
+<tr>
+<td><code>CORP_CA_BUNDLE_PATH</code></td>
+<td>호스트의 CA 번들 PEM 파일 절대 경로</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Step B: 셋업 스크립트 실행 (<code>source</code> 필수)</strong></p>
+<div class="highlight"><pre><span></span><code><span class="nb">source</span><span class="w"> </span>scripts/setup_eval_env.sh
+</code></pre></div>
+<blockquote>
+<p><code>bash scripts/setup_eval_env.sh</code> 또는 <code>./scripts/setup_eval_env.sh</code>로 실행하면
+환경변수가 현재 셸에 export되지 않으므로 반드시 <code>source</code>를 사용한다.</p>
+</blockquote>
+<p>스크립트가 완료되면 아래가 자동으로 처리된 상태가 된다.
+- <code>.env</code> 로드 및 유효성 검사 완료
+- Docker 데몬 동작 확인 완료
+- <code>.venv/</code> 생성 및 활성화 완료
+- <code>pip install -e .</code> (mini-swe-agent) 완료
+- <code>pip install swebench</code> (채점 도구) 완료</p>
+<p><strong>Step C: 새 터미널 세션에서 재활성화</strong></p>
+<p>새 터미널을 열 때마다 다시 실행한다:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">source</span><span class="w"> </span>scripts/setup_eval_env.sh
+</code></pre></div>
+<hr>
 <h2 id="4">4. 사전 준비</h2>
 <h3 id="4-1">4-1. 환경 요구사항 확인</h3>
-<div class="highlight"><pre><span></span><code><span class="c1"># Python 패키지 설치</span>
-pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
-
-<span class="c1"># Docker 설치 확인</span>
+<div class="highlight"><pre><span></span><code><span class="c1"># Docker 설치 확인</span>
 docker<span class="w"> </span>--version
 
 <span class="c1"># Docker 데몬 실행 확인</span>
 docker<span class="w"> </span>info
 </code></pre></div>
-<h3 id="4-2-llm">4-2. 사내 LLM 설정</h3>
-<p><code>src/minisweagent/config/benchmarks/swebench_internal.yaml</code>을 열어 아래 두 항목을 수정한다.</p>
-<div class="highlight"><pre><span></span><code><span class="nt">model</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">model_name</span><span class="p">:</span><span class="w"> </span><span class="s">"openai/&lt;사내-모델명&gt;"</span><span class="w">       </span><span class="c1"># 예: "openai/llama-3.1-70b"</span>
-<span class="w">  </span><span class="nt">model_kwargs</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">api_base</span><span class="p">:</span><span class="w"> </span><span class="s">"http://&lt;사내-LLM-호스트&gt;/v1"</span><span class="w"> </span><span class="c1"># 예: "http://llm.internal.company.com/v1"</span>
-<span class="w">    </span><span class="nt">api_key</span><span class="p">:</span><span class="w"> </span><span class="s">"${INTERNAL_LLM_API_KEY}"</span>
-</code></pre></div>
-<p>API 키는 환경변수로 주입한다.</p>
-<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">INTERNAL_LLM_API_KEY</span><span class="o">=</span>&lt;API-KEY&gt;
+<blockquote>
+<p>Python 패키지 설치는 <code>source scripts/setup_eval_env.sh</code> 가 자동으로 처리한다.</p>
+</blockquote>
+<h3 id="4-2-llm">4-2. 사내 LLM 및 네트워크 설정</h3>
+<p><code>swebench_internal.yaml</code>을 직접 수정하지 않는다. 대신 <code>.env</code> 파일에서 값을 설정하고 <code>source scripts/setup_eval_env.sh</code> 로 로드한다.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># .env 에서 수정할 핵심 항목</span>
+<span class="nv">INTERNAL_LLM_MODEL_NAME</span><span class="o">=</span>openai/your-model-name
+<span class="nv">INTERNAL_LLM_API_BASE</span><span class="o">=</span>http://your-internal-llm-host/v1
+<span class="nv">INTERNAL_LLM_API_KEY</span><span class="o">=</span>your-api-key
+<span class="nv">CORP_CA_BUNDLE_PATH</span><span class="o">=</span>/etc/ssl/certs/corp-ca-bundle.pem
 </code></pre></div>
 <h3 id="4-3">4-3. 데이터셋 확인</h3>
 <p>데이터셋은 repo에 포함되어 있으므로 <code>git clone</code> 후 별도 다운로드 없이 바로 사용 가능하다.</p>

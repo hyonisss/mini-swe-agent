@@ -27,6 +27,7 @@ model:
     api_key: "${INTERNAL_LLM_API_KEY}"
     temperature: 0.0
     drop_params: true
+    ssl_verify: "${CORP_CA_BUNDLE_PATH}"
 
 # ---------------------------------------------------------------------------
 # Environment — 사내 Docker 설정

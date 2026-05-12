@@ -105,7 +105,14 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 5. 완료
+# 5. 호스트 SSL 환경변수 export (litellm → httpx → 사내 CA 인증서 적용)
+# ---------------------------------------------------------------------------
+export SSL_CERT_FILE="${CORP_CA_BUNDLE_PATH}"       # Python stdlib ssl / httpx
+export REQUESTS_CA_BUNDLE="${CORP_CA_BUNDLE_PATH}"  # requests 라이브러리
+export LITELLM_SSL_VERIFY="${CORP_CA_BUNDLE_PATH}"  # litellm 자체 SSL 설정
+
+# ---------------------------------------------------------------------------
+# 6. 완료
 # ---------------------------------------------------------------------------
 echo ""
 echo "================================================================"
@@ -115,10 +122,11 @@ echo " LLM 모델      : ${INTERNAL_LLM_MODEL_NAME}"
 echo " LLM 주소      : ${INTERNAL_LLM_API_BASE}"
 echo " 프록시        : ${HTTP_PROXY}"
 echo " CA 번들       : ${CORP_CA_BUNDLE_PATH}"
+echo " SSL_CERT_FILE : ${SSL_CERT_FILE}"
 echo " pip 인덱스    : ${PIP_INDEX_URL}"
 echo " pip 신뢰호스트 : ${PIP_TRUSTED_HOST}"
 echo "----------------------------------------------------------------"
-echo " 이 값들은 Docker 컨테이너 실행 시 forward_env 를 통해 전달됩니다."
+echo " CA 번들은 호스트(litellm)와 Docker 컨테이너 양쪽에 적용됩니다."
 echo "----------------------------------------------------------------"
 echo " 파일럿 실행 (5개 인스턴스):"
 echo "   mini-extra swebench \\"

@@ -54,6 +54,7 @@ declare -a REQUIRED_VARS=(
     CORP_CA_BUNDLE_PATH
     PIP_INDEX_URL
     PIP_TRUSTED_HOST
+    MSWEA_COST_TRACKING
 )
 
 declare -a MISSING=()
@@ -110,6 +111,7 @@ fi
 export SSL_CERT_FILE="${CORP_CA_BUNDLE_PATH}"       # Python stdlib ssl / httpx
 export REQUESTS_CA_BUNDLE="${CORP_CA_BUNDLE_PATH}"  # requests 라이브러리
 export LITELLM_SSL_VERIFY="${CORP_CA_BUNDLE_PATH}"  # litellm 자체 SSL 설정
+export MSWEA_COST_TRACKING="${MSWEA_COST_TRACKING}" # 사내 미등록 모델 비용 계산 오류 무시
 
 # ---------------------------------------------------------------------------
 # 6. 완료
@@ -125,6 +127,7 @@ echo " CA 번들       : ${CORP_CA_BUNDLE_PATH}"
 echo " SSL_CERT_FILE : ${SSL_CERT_FILE}"
 echo " pip 인덱스    : ${PIP_INDEX_URL}"
 echo " pip 신뢰호스트 : ${PIP_TRUSTED_HOST}"
+echo " 비용 추적     : ${MSWEA_COST_TRACKING}"
 echo "----------------------------------------------------------------"
 echo " CA 번들은 호스트(litellm)와 Docker 컨테이너 양쪽에 적용됩니다."
 echo "----------------------------------------------------------------"

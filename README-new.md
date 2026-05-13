@@ -159,8 +159,27 @@ python -m swebench.harness.run_evaluation \
 
 결과 확인:
 ```bash
-cat results/my-model-eval/results.json
+cat logs/run_evaluation/<model>.my-model-eval.json | python3 -c "
+import json, sys; d = json.load(sys.stdin)
+resolved = len(d['resolved_ids']); total = d['total_instances']
+print(f'Resolved Rate: {resolved}/{total} ({resolved/total*100:.1f}%)')
+"
 ```
+
+### 10. summary.json 생성 (채점 후 실행)
+
+채점 결과와 에이전트 실행 궤적을 합쳐 전체 평가 요약 파일을 생성한다.
+
+```bash
+python scripts/generate_summary.py results/my-model \
+  --eval-results logs/run_evaluation \
+  --run-id my-model-eval \
+  --dataset data/swebench_lite_test2.jsonl
+```
+
+출력: `results/my-model/summary.json`
+
+파일에는 인스턴스별 결과(resolved, 비용, 토큰, 스텝 수, fail_to_pass 카운트)와 전체 지표(Resolved Rate, 평균 비용 등)가 포함된다.
 
 ---
 

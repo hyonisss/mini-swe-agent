@@ -217,6 +217,8 @@ run:
 | `6823d219` | `.env.example`, `setup_eval_env.sh` | `MSWEA_COST_TRACKING=ignore_errors` 추가 | 사내 미등록 모델의 비용 계산 예외로 실행 중단 |
 | `ceb65a4c` | `swebench.py` | 로컬 JSONL 파일 직접 파싱 지원 | HuggingFace SSL 오류로 데이터셋 다운로드 불가 |
 | `72095bb8` | `environments/docker.py` | `run_args` 내 `${VAR}` 확장을 위한 `model_validator` 추가 | CA 경로 env var가 docker run 인자에 미치환 |
+| — | `run/benchmarks/swebench.py` | `process_instance()`에 `started_at`/`completed_at` 기록 추가 | traj.json 기반 정확한 e2e 시간 계산 |
+| — | `scripts/generate_summary.py` | summary.json 생성 스크립트 신규 추가 | 채점 결과 + 실행 궤적 통합 집계 리포트 생성 |
 
 ### 4.2 주요 수정 상세
 
@@ -421,28 +423,48 @@ python -m swebench.harness.run_evaluation \
 ### 7.2 주요 지표 추출
 
 ```bash
-cat results/my-model-eval/results.json | python3 -c "
+cat logs/run_evaluation/<model>.my-model-eval.json | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
+resolved = len(d['resolved_ids'])
 total = d['total_instances']
-resolved = d['resolved_instances']
 print(f'Resolved Rate : {resolved}/{total} ({resolved/total*100:.1f}%)')
 "
 ```
 
-### 7.3 결과 디렉토리 구조
+### 7.3 summary.json 생성
+
+채점 결과와 에이전트 실행 궤적을 통합하여 레퍼런스 포맷의 요약 파일을 생성한다.
+
+```bash
+python scripts/generate_summary.py results/my-model \
+  --eval-results logs/run_evaluation \
+  --run-id my-model-eval \
+  --dataset data/swebench_lite_test2.jsonl
+```
+
+출력: `results/my-model/summary.json`
+
+생성 파일에는 per-task 결과(비용, 토큰, 스텝 수, resolved 여부, fail_to_pass 카운트)와 전체 집계 지표(Resolved Rate, 평균 비용, 평균 스텝 등)가 포함된다.
+
+### 7.4 결과 디렉토리 구조
 
 ```
 results/
-├── my-model/
-│   ├── preds.json                          ← 에이전트 제출 패치 전체
-│   ├── minisweagent.log                    ← 실행 로그
-│   ├── exit_statuses_<timestamp>.yaml      ← 인스턴스별 종료 상태
-│   └── psf__requests-863/
-│       └── psf__requests-863.traj.json    ← 에이전트 실행 궤적
+└── my-model/
+    ├── preds.json                          ← 에이전트 제출 패치 전체
+    ├── summary.json                        ← 통합 요약 리포트
+    ├── minisweagent.log                    ← 실행 로그
+    ├── exit_statuses_<timestamp>.yaml      ← 인스턴스별 종료 상태
+    └── psf__requests-863/
+        └── psf__requests-863.traj.json    ← 에이전트 실행 궤적
+
+logs/run_evaluation/
+├── <model>.my-model-eval.json             ← Resolved Rate 등 집계
 └── my-model-eval/
-    ├── results.json                        ← Resolved Rate 등 집계
-    └── logs/                               ← 인스턴스별 테스트 실행 로그
+    └── <model>/
+        └── <instance_id>/
+            └── report.json                ← 인스턴스별 테스트 결과
 ```
 
 ### 7.4 오답 케이스 분석
@@ -491,6 +513,7 @@ cat results/my-model/exit_statuses_*.yaml
 
 - [ ] 사내 모델 전체 50문제 평가 실행
 - [ ] Resolved Rate 측정 및 기준 모델과 비교
+- [ ] `scripts/generate_summary.py` 로 summary.json 생성 및 결과 정리
 - [ ] 모델 버전별 비교 평가 체계화 (`results/<model-version>/` 구조)
 - [ ] 실패 케이스 패턴 분석 (`traj.json` 활용)
 - [ ] 워커 수 / max_iterations 파라미터 튜닝 실험

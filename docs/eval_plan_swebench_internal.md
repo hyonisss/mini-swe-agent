@@ -306,6 +306,11 @@ cat results/my-model/preds.json | python3 -c "import json,sys; d=json.load(sys.s
 
 mini-swe-agent는 패치 제출까지만 수행한다. 실제 테스트 통과 여부(Resolved Rate)는 SWE-bench 공식 평가 도구로 채점한다.
 
+> **전체 흐름 (3단계)**:
+> 1. `mini-extra swebench` → `preds.json` + `traj.json` 생성
+> 2. `swebench.harness.run_evaluation` → `report.json` + `results.json` 생성
+> 3. `scripts/generate_summary.py` → **`summary.json`** 생성 (반드시 채점 후 실행)
+
 ### 6-1. 채점 도구 설치
 
 ```bash
@@ -348,24 +353,69 @@ python -m swebench.harness.run_evaluation \
 
 ### 6-3. 결과 확인
 
-채점 완료 후 `results/` 아래에 `<run_id>` 디렉토리가 생성되며, 아래 파일들을 확인한다.
+채점 완료 후 `logs/run_evaluation/` 아래에 결과가 생성된다.
 
 ```
-results/my-model-eval/
-├── results.json        ← 전체 요약 (resolved_instances, total_instances, ...)
-└── logs/               ← 인스턴스별 테스트 실행 로그
+logs/run_evaluation/
+├── <model>.<run_id>.json          ← 전체 요약 (resolved_ids, total_instances, ...)
+└── <run_id>/
+    └── <model>/
+        └── <instance_id>/
+            └── report.json        ← 인스턴스별 테스트 결과
 ```
 
 주요 지표 추출:
 
 ```bash
-cat results/my-model-eval/results.json | python3 -c "
+cat logs/run_evaluation/<model>.my-model-eval.json | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
+resolved = len(d['resolved_ids'])
 total = d['total_instances']
-resolved = d['resolved_instances']
 print(f'Resolved Rate : {resolved}/{total} ({resolved/total*100:.1f}%)')
 "
+```
+
+### 6-4. summary.json 생성
+
+채점 결과와 에이전트 실행 궤적(traj.json)을 합쳐 레퍼런스 포맷의 `summary.json`을 생성한다.
+
+```bash
+python scripts/generate_summary.py results/my-model \
+  --eval-results logs/run_evaluation \
+  --run-id my-model-eval \
+  --dataset data/swebench_lite_test2.jsonl
+```
+
+출력: `results/my-model/summary.json`
+
+| 옵션 | 설명 |
+|------|------|
+| `results/my-model` | 에이전트 실행 결과 디렉토리 (`preds.json`, `traj.json` 위치) |
+| `--eval-results` | 채점 결과 디렉토리 (`logs/run_evaluation`) |
+| `--run-id` | `run_evaluation` 실행 시 사용한 `--run_id` 값 |
+| `--dataset` | 인스턴스 메타데이터 JSONL (FAIL_TO_PASS 개수 fallback) |
+
+생성되는 `summary.json` 주요 필드:
+
+```json
+{
+  "run_id": "my-model-eval",
+  "task_counts": { "resolved": 18, "evaluable": 50, "resolution_rate_pct": 36.0 },
+  "agents": {
+    "mini-swe-agent": {
+      "metrics": {
+        "task_resolution_rate": { "value": 0.36, "grade": "B" },
+        "token_efficiency":     { "value": 569000, "grade": "D" },
+        "cost_per_resolved_task": { "value": 1.71, "grade": "B" },
+        "e2e_time":             { "value": 244.0, "grade": "B" },
+        "time_to_first_action": { "value": 7.0,   "grade": "B" },
+        "convergence_steps":    { "value": 27.3,  "grade": "C" }
+      }
+    }
+  },
+  "per_task": [ ... ]
+}
 ```
 
 ---
@@ -417,8 +467,10 @@ cat results/my-model/psf__requests-863/psf__requests-863.traj.json \
 | 파일 | 변경 내용 | 이유 |
 |------|-----------|------|
 | `src/minisweagent/run/benchmarks/swebench.py` | 로컬 JSONL 파일 직접 파싱 지원 추가 | 사내 환경 SSL 오류로 HuggingFace 직접 접근 불가 |
+| `src/minisweagent/run/benchmarks/swebench.py` | `process_instance()`에 `started_at`/`completed_at` 기록 추가 | traj.json 기반 정확한 e2e 시간 계산을 위해 |
 | `src/minisweagent/config/benchmarks/swebench_internal.yaml` | 사내 LLM 엔드포인트 config 추가 | 사내 모델 연동 |
 | `scripts/download_swebench_lite.py` | URL 직접 다운로드 스크립트 추가 | SSL 우회(curl `--ssl-no-revoke`) 방식으로 데이터 확보 |
+| `scripts/generate_summary.py` | summary.json 생성 스크립트 추가 | 채점 결과 + 실행 궤적을 레퍼런스 포맷으로 통합 집계 |
 
 ### 핵심 코드 변경 (swebench.py)
 

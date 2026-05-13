@@ -2784,6 +2784,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#6-4-summaryjson" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6-4. summary.json 생성
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3286,6 +3297,12 @@ cat<span class="w"> </span>results/my-model/preds.json<span class="w"> </span><s
 <hr>
 <h2 id="6">6. 결과 채점</h2>
 <p>mini-swe-agent는 패치 제출까지만 수행한다. 실제 테스트 통과 여부(Resolved Rate)는 SWE-bench 공식 평가 도구로 채점한다.</p>
+<blockquote>
+<p><strong>전체 흐름 (3단계)</strong>:
+1. <code>mini-extra swebench</code> → <code>preds.json</code> + <code>traj.json</code> 생성
+2. <code>swebench.harness.run_evaluation</code> → <code>report.json</code> + <code>results.json</code> 생성
+3. <code>scripts/generate_summary.py</code> → <strong><code>summary.json</code></strong> 생성 (반드시 채점 후 실행)</p>
+</blockquote>
 <h3 id="6-1">6-1. 채점 도구 설치</h3>
 <div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>swebench
 </code></pre></div>
@@ -3314,19 +3331,75 @@ bash<span class="w"> </span>scripts/setup_docker_proxy.sh
 <span class="w">  </span>--run_id<span class="w"> </span>my-model-eval
 </code></pre></div>
 <h3 id="6-3_1">6-3. 결과 확인</h3>
-<p>채점 완료 후 <code>results/</code> 아래에 <code>&lt;run_id&gt;</code> 디렉토리가 생성되며, 아래 파일들을 확인한다.</p>
-<div class="highlight"><pre><span></span><code>results/my-model-eval/
-├── results.json        ← 전체 요약 (resolved_instances, total_instances, ...)
-└── logs/               ← 인스턴스별 테스트 실행 로그
+<p>채점 완료 후 <code>logs/run_evaluation/</code> 아래에 결과가 생성된다.</p>
+<div class="highlight"><pre><span></span><code>logs/run_evaluation/
+├── &lt;model&gt;.&lt;run_id&gt;.json          ← 전체 요약 (resolved_ids, total_instances, ...)
+└── &lt;run_id&gt;/
+    └── &lt;model&gt;/
+        └── &lt;instance_id&gt;/
+            └── report.json        ← 인스턴스별 테스트 결과
 </code></pre></div>
 <p>주요 지표 추출:</p>
-<div class="highlight"><pre><span></span><code>cat<span class="w"> </span>results/my-model-eval/results.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">"</span>
+<div class="highlight"><pre><span></span><code>cat<span class="w"> </span>logs/run_evaluation/&lt;model&gt;.my-model-eval.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">"</span>
 <span class="s2">import json, sys</span>
 <span class="s2">d = json.load(sys.stdin)</span>
+<span class="s2">resolved = len(d['resolved_ids'])</span>
 <span class="s2">total = d['total_instances']</span>
-<span class="s2">resolved = d['resolved_instances']</span>
 <span class="s2">print(f'Resolved Rate : {resolved}/{total} ({resolved/total*100:.1f}%)')</span>
 <span class="s2">"</span>
+</code></pre></div>
+<h3 id="6-4-summaryjson">6-4. summary.json 생성</h3>
+<p>채점 결과와 에이전트 실행 궤적(traj.json)을 합쳐 레퍼런스 포맷의 <code>summary.json</code>을 생성한다.</p>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>scripts/generate_summary.py<span class="w"> </span>results/my-model<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--eval-results<span class="w"> </span>logs/run_evaluation<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--run-id<span class="w"> </span>my-model-eval<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--dataset<span class="w"> </span>data/swebench_lite_test2.jsonl
+</code></pre></div>
+<p>출력: <code>results/my-model/summary.json</code></p>
+<table>
+<thead>
+<tr>
+<th>옵션</th>
+<th>설명</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>results/my-model</code></td>
+<td>에이전트 실행 결과 디렉토리 (<code>preds.json</code>, <code>traj.json</code> 위치)</td>
+</tr>
+<tr>
+<td><code>--eval-results</code></td>
+<td>채점 결과 디렉토리 (<code>logs/run_evaluation</code>)</td>
+</tr>
+<tr>
+<td><code>--run-id</code></td>
+<td><code>run_evaluation</code> 실행 시 사용한 <code>--run_id</code> 값</td>
+</tr>
+<tr>
+<td><code>--dataset</code></td>
+<td>인스턴스 메타데이터 JSONL (FAIL_TO_PASS 개수 fallback)</td>
+</tr>
+</tbody>
+</table>
+<p>생성되는 <code>summary.json</code> 주요 필드:</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">"run_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"my-model-eval"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"task_counts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"resolved"</span><span class="p">:</span><span class="w"> </span><span class="mi">18</span><span class="p">,</span><span class="w"> </span><span class="nt">"evaluable"</span><span class="p">:</span><span class="w"> </span><span class="mi">50</span><span class="p">,</span><span class="w"> </span><span class="nt">"resolution_rate_pct"</span><span class="p">:</span><span class="w"> </span><span class="mf">36.0</span><span class="w"> </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">"agents"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"mini-swe-agent"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"metrics"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"task_resolution_rate"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.36</span><span class="p">,</span><span class="w"> </span><span class="nt">"grade"</span><span class="p">:</span><span class="w"> </span><span class="s2">"B"</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">"token_efficiency"</span><span class="p">:</span><span class="w">     </span><span class="p">{</span><span class="w"> </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="mi">569000</span><span class="p">,</span><span class="w"> </span><span class="nt">"grade"</span><span class="p">:</span><span class="w"> </span><span class="s2">"D"</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">"cost_per_resolved_task"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="mf">1.71</span><span class="p">,</span><span class="w"> </span><span class="nt">"grade"</span><span class="p">:</span><span class="w"> </span><span class="s2">"B"</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">"e2e_time"</span><span class="p">:</span><span class="w">             </span><span class="p">{</span><span class="w"> </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="mf">244.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"grade"</span><span class="p">:</span><span class="w"> </span><span class="s2">"B"</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">"time_to_first_action"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="mf">7.0</span><span class="p">,</span><span class="w">   </span><span class="nt">"grade"</span><span class="p">:</span><span class="w"> </span><span class="s2">"B"</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">"convergence_steps"</span><span class="p">:</span><span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="mf">27.3</span><span class="p">,</span><span class="w">  </span><span class="nt">"grade"</span><span class="p">:</span><span class="w"> </span><span class="s2">"C"</span><span class="w"> </span><span class="p">}</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">"per_task"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="err">...</span><span class="w"> </span><span class="p">]</span>
+<span class="p">}</span>
 </code></pre></div>
 <hr>
 <h2 id="7">7. 비교 기준 (참고)</h2>
@@ -3391,6 +3464,11 @@ cat<span class="w"> </span>results/my-model/psf__requests-863/psf__requests-863.
 <td>사내 환경 SSL 오류로 HuggingFace 직접 접근 불가</td>
 </tr>
 <tr>
+<td><code>src/minisweagent/run/benchmarks/swebench.py</code></td>
+<td><code>process_instance()</code>에 <code>started_at</code>/<code>completed_at</code> 기록 추가</td>
+<td>traj.json 기반 정확한 e2e 시간 계산을 위해</td>
+</tr>
+<tr>
 <td><code>src/minisweagent/config/benchmarks/swebench_internal.yaml</code></td>
 <td>사내 LLM 엔드포인트 config 추가</td>
 <td>사내 모델 연동</td>
@@ -3399,6 +3477,11 @@ cat<span class="w"> </span>results/my-model/psf__requests-863/psf__requests-863.
 <td><code>scripts/download_swebench_lite.py</code></td>
 <td>URL 직접 다운로드 스크립트 추가</td>
 <td>SSL 우회(curl <code>--ssl-no-revoke</code>) 방식으로 데이터 확보</td>
+</tr>
+<tr>
+<td><code>scripts/generate_summary.py</code></td>
+<td>summary.json 생성 스크립트 추가</td>
+<td>채점 결과 + 실행 궤적을 레퍼런스 포맷으로 통합 집계</td>
 </tr>
 </tbody>
 </table>

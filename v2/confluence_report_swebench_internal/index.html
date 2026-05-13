@@ -2852,10 +2852,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#73" class="md-nav__link">
+  <a href="#73-summaryjson" class="md-nav__link">
     <span class="md-ellipsis">
       
-        7.3 결과 디렉토리 구조
+        7.3 summary.json 생성
       
     </span>
   </a>
@@ -2864,6 +2864,17 @@
         
           <li class="md-nav__item">
   <a href="#74" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.4 결과 디렉토리 구조
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#74_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         7.4 오답 케이스 분석
@@ -3232,6 +3243,18 @@ env_startup_command (컨테이너 내부 1회 실행)
 <td><code>run_args</code> 내 <code>${VAR}</code> 확장을 위한 <code>model_validator</code> 추가</td>
 <td>CA 경로 env var가 docker run 인자에 미치환</td>
 </tr>
+<tr>
+<td>—</td>
+<td><code>run/benchmarks/swebench.py</code></td>
+<td><code>process_instance()</code>에 <code>started_at</code>/<code>completed_at</code> 기록 추가</td>
+<td>traj.json 기반 정확한 e2e 시간 계산</td>
+</tr>
+<tr>
+<td>—</td>
+<td><code>scripts/generate_summary.py</code></td>
+<td>summary.json 생성 스크립트 신규 추가</td>
+<td>채점 결과 + 실행 궤적 통합 집계 리포트 생성</td>
+</tr>
 </tbody>
 </table>
 <h3 id="42">4.2 주요 수정 상세</h3>
@@ -3451,27 +3474,41 @@ cat<span class="w"> </span>results/my-model/preds.json<span class="w"> </span><s
 <span class="w">  </span>--run_id<span class="w"> </span>my-model-eval
 </code></pre></div>
 <h3 id="72">7.2 주요 지표 추출</h3>
-<div class="highlight"><pre><span></span><code>cat<span class="w"> </span>results/my-model-eval/results.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">"</span>
+<div class="highlight"><pre><span></span><code>cat<span class="w"> </span>logs/run_evaluation/&lt;model&gt;.my-model-eval.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">"</span>
 <span class="s2">import json, sys</span>
 <span class="s2">d = json.load(sys.stdin)</span>
+<span class="s2">resolved = len(d['resolved_ids'])</span>
 <span class="s2">total = d['total_instances']</span>
-<span class="s2">resolved = d['resolved_instances']</span>
 <span class="s2">print(f'Resolved Rate : {resolved}/{total} ({resolved/total*100:.1f}%)')</span>
 <span class="s2">"</span>
 </code></pre></div>
-<h3 id="73">7.3 결과 디렉토리 구조</h3>
-<div class="highlight"><pre><span></span><code>results/
-├── my-model/
-│   ├── preds.json                          ← 에이전트 제출 패치 전체
-│   ├── minisweagent.log                    ← 실행 로그
-│   ├── exit_statuses_&lt;timestamp&gt;.yaml      ← 인스턴스별 종료 상태
-│   └── psf__requests-863/
-│       └── psf__requests-863.traj.json    ← 에이전트 실행 궤적
-└── my-model-eval/
-    ├── results.json                        ← Resolved Rate 등 집계
-    └── logs/                               ← 인스턴스별 테스트 실행 로그
+<h3 id="73-summaryjson">7.3 summary.json 생성</h3>
+<p>채점 결과와 에이전트 실행 궤적을 통합하여 레퍼런스 포맷의 요약 파일을 생성한다.</p>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>scripts/generate_summary.py<span class="w"> </span>results/my-model<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--eval-results<span class="w"> </span>logs/run_evaluation<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--run-id<span class="w"> </span>my-model-eval<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--dataset<span class="w"> </span>data/swebench_lite_test2.jsonl
 </code></pre></div>
-<h3 id="74">7.4 오답 케이스 분석</h3>
+<p>출력: <code>results/my-model/summary.json</code></p>
+<p>생성 파일에는 per-task 결과(비용, 토큰, 스텝 수, resolved 여부, fail_to_pass 카운트)와 전체 집계 지표(Resolved Rate, 평균 비용, 평균 스텝 등)가 포함된다.</p>
+<h3 id="74">7.4 결과 디렉토리 구조</h3>
+<div class="highlight"><pre><span></span><code>results/
+└── my-model/
+    ├── preds.json                          ← 에이전트 제출 패치 전체
+    ├── summary.json                        ← 통합 요약 리포트
+    ├── minisweagent.log                    ← 실행 로그
+    ├── exit_statuses_&lt;timestamp&gt;.yaml      ← 인스턴스별 종료 상태
+    └── psf__requests-863/
+        └── psf__requests-863.traj.json    ← 에이전트 실행 궤적
+
+logs/run_evaluation/
+├── &lt;model&gt;.my-model-eval.json             ← Resolved Rate 등 집계
+└── my-model-eval/
+    └── &lt;model&gt;/
+        └── &lt;instance_id&gt;/
+            └── report.json                ← 인스턴스별 테스트 결과
+</code></pre></div>
+<h3 id="74_1">7.4 오답 케이스 분석</h3>
 <div class="highlight"><pre><span></span><code><span class="c1"># 특정 인스턴스 제출 패치 확인</span>
 cat<span class="w"> </span>results/my-model/&lt;instance_id&gt;/&lt;instance_id&gt;.traj.json<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">"import json,sys; d=json.load(sys.stdin); print(d['info']['submission'])"</span>
@@ -3569,6 +3606,7 @@ cat<span class="w"> </span>results/my-model/exit_statuses_*.yaml
 <ul>
 <li>[ ] 사내 모델 전체 50문제 평가 실행</li>
 <li>[ ] Resolved Rate 측정 및 기준 모델과 비교</li>
+<li>[ ] <code>scripts/generate_summary.py</code> 로 summary.json 생성 및 결과 정리</li>
 <li>[ ] 모델 버전별 비교 평가 체계화 (<code>results/&lt;model-version&gt;/</code> 구조)</li>
 <li>[ ] 실패 케이스 패턴 분석 (<code>traj.json</code> 활용)</li>
 <li>[ ] 워커 수 / max_iterations 파라미터 튜닝 실험</li>

@@ -2752,10 +2752,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#6-2" class="md-nav__link">
+  <a href="#6-2-docker-1" class="md-nav__link">
     <span class="md-ellipsis">
       
-        6-2. 채점 실행
+        6-2. 사내 네트워크 전용: Docker 프록시 설정 (최초 1회)
       
     </span>
   </a>
@@ -2764,6 +2764,17 @@
         
           <li class="md-nav__item">
   <a href="#6-3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6-3. 채점 실행
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-3_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         6-3. 결과 확인
@@ -3278,14 +3289,31 @@ cat<span class="w"> </span>results/my-model/preds.json<span class="w"> </span><s
 <h3 id="6-1">6-1. 채점 도구 설치</h3>
 <div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>swebench
 </code></pre></div>
-<h3 id="6-2">6-2. 채점 실행</h3>
+<h3 id="6-2-docker-1">6-2. 사내 네트워크 전용: Docker 프록시 설정 (최초 1회)</h3>
+<p>채점 시 <code>swebench.harness.run_evaluation</code> 은 <strong>base 이미지를 로컬에서 직접 빌드</strong>한다.
+이 빌드 과정에서 Docker 컨테이너 내부의 <code>apt-get</code> 이 외부 Ubuntu 미러에 접근하므로,
+프록시 없이는 아래와 같은 에러가 발생한다.</p>
+<div class="highlight"><pre><span></span><code>Failed to fetch http://archive.ubuntu.com/ubuntu/dists/jammy/InRelease
+  Connection failed [IP: 172.66.152.176 80]
+Err:1 https://security.ubuntu.com/ubuntu jammy-security InRelease
+</code></pre></div>
+<blockquote>
+<p><strong>원인</strong>: <code>swebench.harness.run_evaluation</code> 은 mini-swe-agent 의 <code>swebench_internal.yaml</code> 설정과 무관하게 자체적으로 Docker 컨테이너를 관리한다. <code>env_startup_command</code> 가 적용되지 않으므로 컨테이너 내부 apt 가 사내 프록시를 모른다.</p>
+</blockquote>
+<p><strong>해결</strong>: Docker 클라이언트 프록시 설정으로 모든 컨테이너에 프록시를 자동 주입한다.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># 반드시 setup_eval_env.sh 실행 후 수행</span>
+<span class="nb">source</span><span class="w"> </span>scripts/setup_eval_env.sh
+bash<span class="w"> </span>scripts/setup_docker_proxy.sh
+</code></pre></div>
+<p><code>~/.docker/config.json</code> 에 유저 레벨로 저장되며 <strong>sudo 불필요, 최초 1회만 실행</strong>한다.</p>
+<h3 id="6-3">6-3. 채점 실행</h3>
 <div class="highlight"><pre><span></span><code>python<span class="w"> </span>-m<span class="w"> </span>swebench.harness.run_evaluation<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--dataset_name<span class="w"> </span>./data/swebench_lite_test2.jsonl<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--predictions_path<span class="w"> </span>./results/my-model/preds.json<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--max_workers<span class="w"> </span><span class="m">4</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--run_id<span class="w"> </span>my-model-eval
 </code></pre></div>
-<h3 id="6-3">6-3. 결과 확인</h3>
+<h3 id="6-3_1">6-3. 결과 확인</h3>
 <p>채점 완료 후 <code>results/</code> 아래에 <code>&lt;run_id&gt;</code> 디렉토리가 생성되며, 아래 파일들을 확인한다.</p>
 <div class="highlight"><pre><span></span><code>results/my-model-eval/
 ├── results.json        ← 전체 요약 (resolved_instances, total_instances, ...)

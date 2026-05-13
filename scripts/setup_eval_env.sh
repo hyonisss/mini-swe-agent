@@ -110,6 +110,7 @@ fi
 # ---------------------------------------------------------------------------
 export SSL_CERT_FILE="${CORP_CA_BUNDLE_PATH}"       # Python stdlib ssl / httpx
 export REQUESTS_CA_BUNDLE="${CORP_CA_BUNDLE_PATH}"  # requests 라이브러리
+export CURL_CA_BUNDLE="${CORP_CA_BUNDLE_PATH}"      # curl / requests 일부 버전
 export LITELLM_SSL_VERIFY="${CORP_CA_BUNDLE_PATH}"  # litellm 자체 SSL 설정
 export MSWEA_COST_TRACKING="${MSWEA_COST_TRACKING}" # 사내 미등록 모델 비용 계산 오류 무시
 

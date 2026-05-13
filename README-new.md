@@ -68,7 +68,35 @@ source scripts/setup_eval_env.sh
 
 성공 시 사내 설정값 요약이 출력된다.
 
-### 5. SWE-bench Docker 이미지 사전 pull (선택, 권장)
+### 5. Docker 프록시 설정 (사내 네트워크 필수)
+
+채점(`swebench run_evaluation`) 시 Docker 컨테이너 내부에서 apt-get 이 외부 Ubuntu 미러에
+접근하지 못하는 문제를 방지하기 위해 Docker 클라이언트 프록시를 설정한다.
+
+> **반드시 `source scripts/setup_eval_env.sh` 실행 후** 아래 명령을 실행한다.
+
+```bash
+bash scripts/setup_docker_proxy.sh
+```
+
+성공 시 출력 예시:
+
+```
+================================================================
+ Docker 프록시 설정 완료
+----------------------------------------------------------------
+ httpProxy  : http://proxy.corp.example.com:8080
+ httpsProxy : http://proxy.corp.example.com:8080
+ noProxy    : localhost,127.0.0.1,...
+----------------------------------------------------------------
+ 이후 Docker 가 실행하는 모든 컨테이너에 위 프록시가 자동 주입됩니다.
+================================================================
+```
+
+> sudo 불필요. `~/.docker/config.json` 에 유저 레벨로 저장되며 최초 1회만 실행하면 된다.
+> 프록시 주소가 바뀐 경우 다시 실행한다.
+
+### 6. SWE-bench Docker 이미지 사전 pull (선택, 권장)
 
 평가 실행 전에 필요한 이미지를 미리 받아두면 평가 중 네트워크 오류로 인한 실패를 예방할 수 있다.
 
@@ -87,7 +115,7 @@ EOF
 > Docker Hub 접근이 불가한 경우 사내 Docker Registry 에 이미지를 미러링해야 한다.
 > 미러링 후 `swebench_internal.yaml` 의 `environment.image` 에 내부 레지스트리 주소를 지정한다.
 
-### 6. 파일럿 실행 (5개 문제로 설정 검증)
+### 7. 파일럿 실행 (5개 문제로 설정 검증)
 
 ```bash
 mini-extra swebench \
@@ -106,7 +134,7 @@ tail -f results/pilot/minisweagent.log
 
 `[corp-setup] Corporate environment configured.` 메시지가 보이면 컨테이너 환경 설정 성공.
 
-### 7. 본 평가 실행 (50개 전체)
+### 8. 본 평가 실행 (50개 전체)
 
 ```bash
 mini-extra swebench \
@@ -119,7 +147,7 @@ mini-extra swebench \
 
 중단 후 재개 시 동일 명령을 재실행하면 완료된 문제는 건너뛴다.
 
-### 8. 채점
+### 9. 채점
 
 ```bash
 python -m swebench.harness.run_evaluation \

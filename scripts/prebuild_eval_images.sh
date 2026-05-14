@@ -19,7 +19,8 @@
 #   bash scripts/prebuild_eval_images.sh [--dataset <path>] [--dry-run]
 #
 # 옵션:
-#   --dataset <path>   평가 데이터셋 JSONL 경로 (기본: data/swebench_lite_test2.jsonl)
+#   --dataset <path>   처리할 JSONL 파일 경로 (여러 번 지정 가능)
+#                      미지정 시 data/ 폴더 내 모든 *.jsonl 파일을 자동 탐색
 #   --dry-run          이미지 목록만 출력하고 실제 빌드는 수행하지 않음
 # =============================================================================
 
@@ -28,19 +29,37 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # 기본값 및 인자 파싱
 # ---------------------------------------------------------------------------
-DATASET="data/swebench_lite_test2.jsonl"
+DATASETS=()
 DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --dataset)
-            DATASET="$2"; shift 2 ;;
+            DATASETS+=("$2"); shift 2 ;;
         --dry-run)
             DRY_RUN=true; shift ;;
         *)
             echo "[prebuild] 알 수 없는 옵션: $1"; exit 1 ;;
     esac
 done
+
+# --dataset 미지정 시 data/ 폴더 내 모든 *.jsonl 자동 탐색
+if [[ ${#DATASETS[@]} -eq 0 ]]; then
+    while IFS= read -r -d '' f; do
+        DATASETS+=("$f")
+    done < <(find data -maxdepth 1 -name "*.jsonl" -print0 2>/dev/null | sort -z)
+
+    if [[ ${#DATASETS[@]} -eq 0 ]]; then
+        echo "[prebuild] ERROR: data/ 폴더에서 *.jsonl 파일을 찾을 수 없습니다."
+        echo "           --dataset <path> 옵션으로 직접 지정하거나 data/ 에 파일을 추가하세요."
+        exit 1
+    fi
+
+    echo "[prebuild] 데이터셋 자동 탐색: ${#DATASETS[@]}개 파일 발견"
+    for f in "${DATASETS[@]}"; do
+        echo "[prebuild]   ${f}"
+    done
+fi
 
 # ---------------------------------------------------------------------------
 # 1. 사전 조건 확인
@@ -59,10 +78,12 @@ if [[ ! -f "${CORP_CA_BUNDLE_PATH}" ]]; then
     exit 1
 fi
 
-if [[ ! -f "${DATASET}" ]]; then
-    echo "[prebuild] ERROR: 데이터셋 파일이 존재하지 않습니다: ${DATASET}"
-    exit 1
-fi
+for ds in "${DATASETS[@]}"; do
+    if [[ ! -f "${ds}" ]]; then
+        echo "[prebuild] ERROR: 데이터셋 파일이 존재하지 않습니다: ${ds}"
+        exit 1
+    fi
+done
 
 if ! command -v docker &>/dev/null; then
     echo "[prebuild] ERROR: docker 명령어를 찾을 수 없습니다."
@@ -75,23 +96,29 @@ if ! docker info &>/dev/null; then
 fi
 
 echo "[prebuild] CA 파일   : ${CORP_CA_BUNDLE_PATH}"
-echo "[prebuild] 데이터셋  : ${DATASET}"
 echo "[prebuild] 드라이런  : ${DRY_RUN}"
 echo ""
 
 # ---------------------------------------------------------------------------
-# 2. 인스턴스 ID → 이미지 이름 변환
+# 2. 인스턴스 ID → 이미지 이름 변환 (중복 제거)
 # ---------------------------------------------------------------------------
 # instance_id: psf__requests-863
 # image:       docker.io/swebench/sweb.eval.x86_64.psf_1776_requests-863:latest
-mapfile -t INSTANCE_IDS < <(python3 -c "
+mapfile -t INSTANCE_IDS < <(python3 - "${DATASETS[@]}" <<'PYEOF'
 import json, sys
-with open('${DATASET}') as f:
-    for line in f:
-        line = line.strip()
-        if line:
-            print(json.loads(line)['instance_id'])
-")
+
+seen = set()
+for path in sys.argv[1:]:
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                iid = json.loads(line)["instance_id"]
+                if iid not in seen:
+                    seen.add(iid)
+                    print(iid)
+PYEOF
+)
 
 declare -a IMAGES
 for iid in "${INSTANCE_IDS[@]}"; do

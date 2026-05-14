@@ -96,13 +96,16 @@ bash scripts/setup_docker_proxy.sh
 > sudo 불필요. `~/.docker/config.json` 에 유저 레벨로 저장되며 최초 1회만 실행하면 된다.
 > 프록시 주소가 바뀐 경우 다시 실행한다.
 
-### 6. 평가 이미지에 CA 인증서 사전 설치 (사내 네트워크 필수)
+### 6. 평가 이미지에 CA 인증서 + 프록시 사전 설치 (사내 네트워크 필수)
 
-채점 단계(`swebench run_evaluation`)는 자체 Docker 컨테이너를 관리하므로
-`swebench_internal.yaml` 의 `env_startup_command` 가 적용되지 않는다.
-따라서 컨테이너 내부에서 HTTPS 요청 시 사내 CA 를 신뢰하지 못해 SSL 오류가 발생한다.
+채점 단계(`swebench run_evaluation`)는 docker-py(Python SDK)로 자체 컨테이너를 관리하므로
+`swebench_internal.yaml` 의 `env_startup_command` 와 `forward_env` 가 **적용되지 않는다**.
+이로 인해 두 가지 문제가 발생한다:
 
-아래 스크립트가 평가 이미지를 pull 하고 사내 CA 인증서를 포함한 레이어를 추가해 동일 태그로 덮어씌운다.
+- 사내 CA 를 신뢰하지 못해 HTTPS 요청에서 SSL 오류 발생
+- 프록시가 설정되지 않아 테스트 코드의 외부 HTTP 요청이 502 오류로 실패
+
+아래 스크립트가 평가 이미지를 pull 한 뒤 **사내 CA 인증서 설치와 프록시 환경변수(`HTTP_PROXY` 등)** 를 포함한 레이어를 추가해 동일 태그로 덮어씌운다.
 
 > **반드시 `source scripts/setup_eval_env.sh` 실행 후** 아래 명령을 실행한다.
 
@@ -123,8 +126,9 @@ bash scripts/prebuild_eval_images.sh
 ================================================================
 ```
 
-> 이미지 pull 후 CA 레이어를 추가하므로 pull과 CA 설치를 한 번에 수행한다.
-> 동일한 이미지에 이미 CA 가 설치되어 있으면 자동으로 스킵한다.
+> 이미지 pull 후 CA 설치 + 프록시 ENV 주입을 한 번에 수행한다.
+> CA 와 프록시가 모두 설치된 이미지는 자동으로 스킵한다(`corp-ca-installed` + `corp-proxy-injected` 라벨로 판별).
+> CA만 설치된 구버전 이미지는 재빌드되어 프록시 ENV 가 추가된다.
 > `--dry-run` 옵션으로 이미지 목록만 먼저 확인할 수 있다.
 > Docker Hub 접근이 불가한 경우 사내 Docker Registry 에 이미지를 미러링해야 한다.
 

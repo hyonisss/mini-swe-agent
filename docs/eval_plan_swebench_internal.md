@@ -186,9 +186,10 @@ source scripts/setup_eval_env.sh
 bash scripts/setup_docker_proxy.sh
 ```
 
-**Step D: 평가 이미지에 CA 인증서 설치 (최초 1회, 이미지 갱신 시 재실행)**
+**Step D: 평가 이미지에 CA 인증서 + 프록시 설치 (최초 1회, 이미지 갱신 시 재실행)**
 
-채점 컨테이너에 사내 CA를 신뢰하게 한다. 이미지 pull도 이 단계에서 함께 수행된다.
+채점 컨테이너에 사내 CA 신뢰 설정과 프록시 환경변수(`HTTP_PROXY` 등)를 이미지 레이어로 구워 넣는다.
+이미지 pull도 이 단계에서 함께 수행된다.
 
 ```bash
 bash scripts/prebuild_eval_images.sh
@@ -240,18 +241,23 @@ wc -l data/swebench_lite_test2.jsonl
 # 예상 출력: 50 data/swebench_lite_test2.jsonl
 ```
 
-### 4-4. 평가 이미지에 CA 인증서 사전 설치 (사내 네트워크 필수)
+### 4-4. 평가 이미지에 CA 인증서 + 프록시 사전 설치 (사내 네트워크 필수)
 
-채점 단계(`swebench.harness.run_evaluation`)는 자체 Docker 컨테이너를 관리하며
-`swebench_internal.yaml`의 `env_startup_command`가 적용되지 않는다.
-따라서 채점 컨테이너 내부에서 HTTPS 요청(예: `httpbin.org`) 시 사내 CA를 신뢰하지 못해
-SSL 검증 실패로 테스트가 오류 처리된다.
+채점 단계(`swebench.harness.run_evaluation`)는 **docker-py(Python SDK)** 로 자체 컨테이너를 관리하며
+`swebench_internal.yaml`의 `env_startup_command` 및 `forward_env` 가 **적용되지 않는다**.
+이로 인해 두 가지 문제가 발생한다:
 
-`scripts/prebuild_eval_images.sh`는 평가 이미지를 pull한 뒤 사내 CA 인증서를 포함한 레이어를 추가해
+| 문제 | 원인 |
+|------|------|
+| HTTPS SSL 오류 | 채점 컨테이너가 사내 CA를 신뢰하지 않음 |
+| 외부 HTTP 요청 502 실패 | 채점 컨테이너에 프록시 환경변수 미주입 |
+
+`scripts/prebuild_eval_images.sh`는 평가 이미지를 pull한 뒤 **CA 인증서 설치와 프록시 환경변수
+(`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` 대소문자 모두)** 를 포함한 레이어를 추가해
 동일 태그로 덮어씌운다. swebench는 이미지 이름만 참조하므로 코드 수정 없이 적용된다.
 
 ```bash
-# setup_eval_env.sh 실행 후 수행 (CORP_CA_BUNDLE_PATH 필요)
+# setup_eval_env.sh 실행 후 수행 (CORP_CA_BUNDLE_PATH, HTTP_PROXY 등 필요)
 bash scripts/prebuild_eval_images.sh
 ```
 
@@ -262,9 +268,10 @@ bash scripts/prebuild_eval_images.sh
 | `--dataset <path>` | 특정 JSONL 파일 지정 (여러 번 사용 가능). 미지정 시 `data/*.jsonl` 전체 자동 탐색 |
 | `--dry-run` | 대상 이미지 목록만 출력하고 실제 빌드는 수행하지 않음 |
 
-> 이미지 pull과 CA 설치를 한 번에 수행한다. 이미지 사전 pull은 별도로 실행할 필요 없다.
-> 이미 CA 레이어가 추가된 이미지는 자동으로 스킵된다 (`corp-ca-installed` Docker 라벨로 판별).
-> 이미지 업데이트나 CA 갱신 시 재실행하면 새 레이어로 교체된다.
+> 이미지 pull, CA 설치, 프록시 ENV 주입을 한 번에 수행한다.
+> CA 와 프록시가 모두 설치된 이미지는 자동으로 스킵된다 (`corp-ca-installed` + `corp-proxy-injected` Docker 라벨로 판별).
+> CA만 설치된 구버전 이미지는 재빌드되어 프록시 ENV 가 추가된다.
+> 이미지 업데이트나 프록시 주소 변경 시 재실행하면 새 레이어로 교체된다.
 > 사내 Docker Registry에 미러링이 필요한 경우 `swebench_internal.yaml`의 `environment` 섹션에 커스텀 레지스트리 주소를 추가한다.
 
 ---
@@ -496,6 +503,7 @@ cat results/my-model/psf__requests-863/psf__requests-863.traj.json \
 | `scripts/download_swebench_lite.py` | URL 직접 다운로드 스크립트 추가 | SSL 우회(curl `--ssl-no-revoke`) 방식으로 데이터 확보 |
 | `scripts/generate_summary.py` | summary.json 생성 스크립트 추가 | 채점 결과 + 실행 궤적을 레퍼런스 포맷으로 통합 집계 |
 | `scripts/prebuild_eval_images.sh` | 평가 이미지 CA 인증서 사전 설치 스크립트 추가 | `run_evaluation` 컨테이너가 사내 CA 미신뢰로 HTTPS 요청 실패하는 문제 해결 |
+| `scripts/prebuild_eval_images.sh` | Dockerfile 에 `ENV` 지시어 추가 및 스킵 조건 업데이트 | `run_evaluation` 은 docker-py 로 컨테이너를 관리해 `~/.docker/config.json` proxies 가 적용되지 않으므로, 테스트 코드의 외부 HTTP 요청 502 실패를 해결하기 위해 프록시 ENV 를 이미지에 직접 구워 넣음 |
 
 ### 핵심 코드 변경 (swebench.py)
 

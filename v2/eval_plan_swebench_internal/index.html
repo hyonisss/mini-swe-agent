@@ -2652,10 +2652,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#4-4-swe-bench-docker-pull" class="md-nav__link">
+  <a href="#4-4-ca" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4-4. SWE-bench Docker 이미지 사전 pull (선택)
+        4-4. 평가 이미지에 CA 인증서 사전 설치 (사내 네트워크 필수)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-5-swe-bench-docker-pull" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4-5. SWE-bench Docker 이미지 사전 pull (선택)
       
     </span>
   </a>
@@ -3216,7 +3227,40 @@ docker<span class="w"> </span>info
 wc<span class="w"> </span>-l<span class="w"> </span>data/swebench_lite_test2.jsonl
 <span class="c1"># 예상 출력: 50 data/swebench_lite_test2.jsonl</span>
 </code></pre></div>
-<h3 id="4-4-swe-bench-docker-pull">4-4. SWE-bench Docker 이미지 사전 pull (선택)</h3>
+<h3 id="4-4-ca">4-4. 평가 이미지에 CA 인증서 사전 설치 (사내 네트워크 필수)</h3>
+<p>채점 단계(<code>swebench.harness.run_evaluation</code>)는 자체 Docker 컨테이너를 관리하며
+<code>swebench_internal.yaml</code>의 <code>env_startup_command</code>가 적용되지 않는다.
+따라서 채점 컨테이너 내부에서 HTTPS 요청(예: <code>httpbin.org</code>) 시 사내 CA를 신뢰하지 못해
+SSL 검증 실패로 테스트가 오류 처리된다.</p>
+<p><code>scripts/prebuild_eval_images.sh</code>는 평가 이미지를 pull한 뒤 사내 CA 인증서를 포함한 레이어를 추가해
+동일 태그로 덮어씌운다. swebench는 이미지 이름만 참조하므로 코드 수정 없이 적용된다.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># setup_eval_env.sh 실행 후 수행 (CORP_CA_BUNDLE_PATH 필요)</span>
+bash<span class="w"> </span>scripts/prebuild_eval_images.sh
+</code></pre></div>
+<p>옵션:</p>
+<table>
+<thead>
+<tr>
+<th>옵션</th>
+<th>설명</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--dataset &lt;path&gt;</code></td>
+<td>데이터셋 경로 지정 (기본: <code>data/swebench_lite_test2.jsonl</code>)</td>
+</tr>
+<tr>
+<td><code>--dry-run</code></td>
+<td>대상 이미지 목록만 출력하고 실제 빌드는 수행하지 않음</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>이미 CA 레이어가 추가된 이미지는 자동으로 스킵된다 (<code>corp-ca-installed</code> Docker 라벨로 판별).
+이미지 업데이트나 CA 갱신 시 재실행하면 새 레이어로 교체된다.</p>
+</blockquote>
+<h3 id="4-5-swe-bench-docker-pull">4-5. SWE-bench Docker 이미지 사전 pull (선택)</h3>
 <p>각 문제 실행 시 자동으로 pull되지만, 사내 네트워크 속도가 느릴 경우 미리 받아두면 좋다.
 아래 명령으로 데이터셋의 50개 인스턴스에 해당하는 이미지를 한 번에 pull한다.</p>
 <div class="highlight"><pre><span></span><code>python3<span class="w"> </span>-<span class="w"> </span><span class="s">&lt;&lt;'EOF'</span>
@@ -3482,6 +3526,11 @@ cat<span class="w"> </span>results/my-model/psf__requests-863/psf__requests-863.
 <td><code>scripts/generate_summary.py</code></td>
 <td>summary.json 생성 스크립트 추가</td>
 <td>채점 결과 + 실행 궤적을 레퍼런스 포맷으로 통합 집계</td>
+</tr>
+<tr>
+<td><code>scripts/prebuild_eval_images.sh</code></td>
+<td>평가 이미지 CA 인증서 사전 설치 스크립트 추가</td>
+<td><code>run_evaluation</code> 컨테이너가 사내 CA 미신뢰로 HTTPS 요청 실패하는 문제 해결</td>
 </tr>
 </tbody>
 </table>

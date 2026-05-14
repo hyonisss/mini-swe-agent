@@ -93,13 +93,20 @@ fi
 echo "[setup] Docker: $(docker --version)"
 
 # ---------------------------------------------------------------------------
-# 4. .venv 활성화 (존재하는 경우)
+# 4. .venv bin 경로를 PATH 에 직접 주입 (source activate 대신)
+#    이유: source activate 는 PYTHONHOME 을 unset 하고 PATH 를 재작성하므로
+#         앞 단계에서 export 한 환경변수가 유실될 위험이 있음.
+#         또한 Windows Git Bash 에서는 .venv/bin/activate 가 없고
+#         .venv/Scripts/ 가 사용되어 activate 가 조용히 실패하는 문제도 있음.
+#         PATH 직접 주입은 두 경우 모두 안전하게 동작한다.
 # ---------------------------------------------------------------------------
 VENV_DIR="${REPO_ROOT}/.venv"
-if [[ -d "${VENV_DIR}" ]]; then
-    echo "[setup] .venv 활성화 ..."
-    # shellcheck source=/dev/null
-    source "${VENV_DIR}/bin/activate" || { echo "[setup] ERROR: venv 활성화 실패"; return 1 2>/dev/null || exit 1; }
+if [[ -d "${VENV_DIR}/bin" ]]; then
+    echo "[setup] .venv/bin → PATH 주입 ..."
+    export PATH="${VENV_DIR}/bin:${PATH}"
+elif [[ -d "${VENV_DIR}/Scripts" ]]; then
+    echo "[setup] .venv/Scripts → PATH 주입 (Windows Git Bash) ..."
+    export PATH="${VENV_DIR}/Scripts:${PATH}"
 else
     echo "[setup] INFO: .venv 없음 — 시스템 Python 환경을 사용합니다."
     echo "        venv 를 사용하려면: python3 -m venv ${VENV_DIR} && pip install -e . && pip install swebench"

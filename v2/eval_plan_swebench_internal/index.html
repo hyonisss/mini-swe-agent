@@ -2655,7 +2655,7 @@
   <a href="#4-4-ca" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4-4. 평가 이미지에 CA 인증서 사전 설치 (사내 네트워크 필수)
+        4-4. 평가 이미지에 CA 인증서 + 프록시 사전 설치 (사내 네트워크 필수)
       
     </span>
   </a>
@@ -3190,8 +3190,9 @@ PASS_TO_PASS       : 기존 통과 상태를 유지해야 하는 테스트
 <p>채점(<code>run_evaluation</code>) 컨테이너에 프록시를 자동 주입한다.</p>
 <div class="highlight"><pre><span></span><code>bash<span class="w"> </span>scripts/setup_docker_proxy.sh
 </code></pre></div>
-<p><strong>Step D: 평가 이미지에 CA 인증서 설치 (최초 1회, 이미지 갱신 시 재실행)</strong></p>
-<p>채점 컨테이너에 사내 CA를 신뢰하게 한다. 이미지 pull도 이 단계에서 함께 수행된다.</p>
+<p><strong>Step D: 평가 이미지에 CA 인증서 + 프록시 설치 (최초 1회, 이미지 갱신 시 재실행)</strong></p>
+<p>채점 컨테이너에 사내 CA 신뢰 설정과 프록시 환경변수(<code>HTTP_PROXY</code> 등)를 이미지 레이어로 구워 넣는다.
+이미지 pull도 이 단계에서 함께 수행된다.</p>
 <div class="highlight"><pre><span></span><code>bash<span class="w"> </span>scripts/prebuild_eval_images.sh
 </code></pre></div>
 <p><strong>Step E: 새 터미널 세션에서 재활성화</strong></p>
@@ -3224,14 +3225,32 @@ docker<span class="w"> </span>info
 wc<span class="w"> </span>-l<span class="w"> </span>data/swebench_lite_test2.jsonl
 <span class="c1"># 예상 출력: 50 data/swebench_lite_test2.jsonl</span>
 </code></pre></div>
-<h3 id="4-4-ca">4-4. 평가 이미지에 CA 인증서 사전 설치 (사내 네트워크 필수)</h3>
-<p>채점 단계(<code>swebench.harness.run_evaluation</code>)는 자체 Docker 컨테이너를 관리하며
-<code>swebench_internal.yaml</code>의 <code>env_startup_command</code>가 적용되지 않는다.
-따라서 채점 컨테이너 내부에서 HTTPS 요청(예: <code>httpbin.org</code>) 시 사내 CA를 신뢰하지 못해
-SSL 검증 실패로 테스트가 오류 처리된다.</p>
-<p><code>scripts/prebuild_eval_images.sh</code>는 평가 이미지를 pull한 뒤 사내 CA 인증서를 포함한 레이어를 추가해
+<h3 id="4-4-ca">4-4. 평가 이미지에 CA 인증서 + 프록시 사전 설치 (사내 네트워크 필수)</h3>
+<p>채점 단계(<code>swebench.harness.run_evaluation</code>)는 <strong>docker-py(Python SDK)</strong> 로 자체 컨테이너를 관리하며
+<code>swebench_internal.yaml</code>의 <code>env_startup_command</code> 및 <code>forward_env</code> 가 <strong>적용되지 않는다</strong>.
+이로 인해 두 가지 문제가 발생한다:</p>
+<table>
+<thead>
+<tr>
+<th>문제</th>
+<th>원인</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HTTPS SSL 오류</td>
+<td>채점 컨테이너가 사내 CA를 신뢰하지 않음</td>
+</tr>
+<tr>
+<td>외부 HTTP 요청 502 실패</td>
+<td>채점 컨테이너에 프록시 환경변수 미주입</td>
+</tr>
+</tbody>
+</table>
+<p><code>scripts/prebuild_eval_images.sh</code>는 평가 이미지를 pull한 뒤 <strong>CA 인증서 설치와 프록시 환경변수
+(<code>HTTP_PROXY</code>, <code>HTTPS_PROXY</code>, <code>NO_PROXY</code> 대소문자 모두)</strong> 를 포함한 레이어를 추가해
 동일 태그로 덮어씌운다. swebench는 이미지 이름만 참조하므로 코드 수정 없이 적용된다.</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># setup_eval_env.sh 실행 후 수행 (CORP_CA_BUNDLE_PATH 필요)</span>
+<div class="highlight"><pre><span></span><code><span class="c1"># setup_eval_env.sh 실행 후 수행 (CORP_CA_BUNDLE_PATH, HTTP_PROXY 등 필요)</span>
 bash<span class="w"> </span>scripts/prebuild_eval_images.sh
 </code></pre></div>
 <p>옵션:</p>
@@ -3254,9 +3273,10 @@ bash<span class="w"> </span>scripts/prebuild_eval_images.sh
 </tbody>
 </table>
 <blockquote>
-<p>이미지 pull과 CA 설치를 한 번에 수행한다. 이미지 사전 pull은 별도로 실행할 필요 없다.
-이미 CA 레이어가 추가된 이미지는 자동으로 스킵된다 (<code>corp-ca-installed</code> Docker 라벨로 판별).
-이미지 업데이트나 CA 갱신 시 재실행하면 새 레이어로 교체된다.
+<p>이미지 pull, CA 설치, 프록시 ENV 주입을 한 번에 수행한다.
+CA 와 프록시가 모두 설치된 이미지는 자동으로 스킵된다 (<code>corp-ca-installed</code> + <code>corp-proxy-injected</code> Docker 라벨로 판별).
+CA만 설치된 구버전 이미지는 재빌드되어 프록시 ENV 가 추가된다.
+이미지 업데이트나 프록시 주소 변경 시 재실행하면 새 레이어로 교체된다.
 사내 Docker Registry에 미러링이 필요한 경우 <code>swebench_internal.yaml</code>의 <code>environment</code> 섹션에 커스텀 레지스트리 주소를 추가한다.</p>
 </blockquote>
 <hr>
@@ -3516,6 +3536,11 @@ cat<span class="w"> </span>results/my-model/psf__requests-863/psf__requests-863.
 <td><code>scripts/prebuild_eval_images.sh</code></td>
 <td>평가 이미지 CA 인증서 사전 설치 스크립트 추가</td>
 <td><code>run_evaluation</code> 컨테이너가 사내 CA 미신뢰로 HTTPS 요청 실패하는 문제 해결</td>
+</tr>
+<tr>
+<td><code>scripts/prebuild_eval_images.sh</code></td>
+<td>Dockerfile 에 <code>ENV</code> 지시어 추가 및 스킵 조건 업데이트</td>
+<td><code>run_evaluation</code> 은 docker-py 로 컨테이너를 관리해 <code>~/.docker/config.json</code> proxies 가 적용되지 않으므로, 테스트 코드의 외부 HTTP 요청 502 실패를 해결하기 위해 프록시 ENV 를 이미지에 직접 구워 넣음</td>
 </tr>
 </tbody>
 </table>

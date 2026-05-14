@@ -150,6 +150,14 @@ source scripts/setup_eval_env.sh
  │  ├─ HTTP_PROXY / HTTPS_PROXY / NO_PROXY
  │  └─ MSWEA_COST_TRACKING=ignore_errors  ← 미등록 모델 비용 계산 오류 억제
  ▼
+bash scripts/setup_docker_proxy.sh   (최초 1회)
+ │  ~/.docker/config.json 에 프록시 설정
+ │  → 이후 모든 Docker 컨테이너에 HTTP_PROXY 자동 주입
+ ▼
+bash scripts/prebuild_eval_images.sh  (최초 1회, 이미지 갱신 시 재실행)
+ │  평가 이미지를 pull + 사내 CA 레이어 추가 → 동일 태그로 덮어씌움
+ │  → 채점(run_evaluation) 컨테이너가 사내 CA를 신뢰
+ ▼
 mini-extra swebench 실행
  │
  ▼
@@ -348,30 +356,16 @@ source scripts/setup_eval_env.sh
 신뢰하지 못해 SSL 오류가 발생한다.
 
 `prebuild_eval_images.sh`가 평가 이미지를 pull하고 사내 CA 인증서 레이어를 추가해 동일 태그로 덮어씌운다.
+이미지 pull과 CA 설치를 한 번에 처리하므로 별도의 이미지 사전 pull은 필요 없다.
 
 ```bash
 # 반드시 source scripts/setup_eval_env.sh 실행 후 수행
 bash scripts/prebuild_eval_images.sh
 ```
 
+> `data/*.jsonl` 파일을 자동 탐색하여 필요한 이미지 목록을 결정한다. 데이터셋 파일이 추가되어도 스크립트 수정 없이 자동 반영된다.
 > 이미 CA 레이어가 추가된 이미지는 자동 스킵된다 (Docker 라벨 `corp-ca-installed=true`).
-
-### 5.6 Docker 이미지 사전 pull (권장)
-
-50개 문제 각각에 대응하는 Docker 이미지를 미리 받아두면 평가 중 네트워크 오류를 예방할 수 있다.
-(`prebuild_eval_images.sh`가 pull도 자동 수행하므로 별도 실행은 필요 없을 수 있다.)
-
-```bash
-python3 - <<'EOF'
-import json, subprocess
-instances = [json.loads(l) for l in open("data/swebench_lite_test2.jsonl")]
-for inst in instances:
-    iid = inst["instance_id"].replace("__", "_1776_")
-    image = f"docker.io/swebench/sweb.eval.x86_64.{iid}:latest".lower()
-    print(f"Pulling {image} ...")
-    subprocess.run(["docker", "pull", image], check=False)
-EOF
-```
+> 이미지 업데이트나 CA 갱신 시 재실행하면 새 레이어로 교체된다.
 
 ---
 
@@ -484,7 +478,7 @@ logs/run_evaluation/
             └── report.json                ← 인스턴스별 테스트 결과
 ```
 
-### 7.4 오답 케이스 분석
+### 7.5 오답 케이스 분석
 
 ```bash
 # 특정 인스턴스 제출 패치 확인

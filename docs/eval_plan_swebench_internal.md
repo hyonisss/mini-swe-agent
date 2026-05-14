@@ -178,7 +178,23 @@ source scripts/setup_eval_env.sh
 - `pip install -e .` (mini-swe-agent) 완료
 - `pip install swebench` (채점 도구) 완료
 
-**Step C: 새 터미널 세션에서 재활성화**
+**Step C: Docker 클라이언트 프록시 설정 (최초 1회)**
+
+채점(`run_evaluation`) 컨테이너에 프록시를 자동 주입한다.
+
+```bash
+bash scripts/setup_docker_proxy.sh
+```
+
+**Step D: 평가 이미지에 CA 인증서 설치 (최초 1회, 이미지 갱신 시 재실행)**
+
+채점 컨테이너에 사내 CA를 신뢰하게 한다. 이미지 pull도 이 단계에서 함께 수행된다.
+
+```bash
+bash scripts/prebuild_eval_images.sh
+```
+
+**Step E: 새 터미널 세션에서 재활성화**
 
 새 터미널을 열 때마다 다시 실행한다:
 
@@ -243,30 +259,13 @@ bash scripts/prebuild_eval_images.sh
 
 | 옵션 | 설명 |
 |------|------|
-| `--dataset <path>` | 데이터셋 경로 지정 (기본: `data/swebench_lite_test2.jsonl`) |
+| `--dataset <path>` | 특정 JSONL 파일 지정 (여러 번 사용 가능). 미지정 시 `data/*.jsonl` 전체 자동 탐색 |
 | `--dry-run` | 대상 이미지 목록만 출력하고 실제 빌드는 수행하지 않음 |
 
+> 이미지 pull과 CA 설치를 한 번에 수행한다. 이미지 사전 pull은 별도로 실행할 필요 없다.
 > 이미 CA 레이어가 추가된 이미지는 자동으로 스킵된다 (`corp-ca-installed` Docker 라벨로 판별).
 > 이미지 업데이트나 CA 갱신 시 재실행하면 새 레이어로 교체된다.
-
-### 4-5. SWE-bench Docker 이미지 사전 pull (선택)
-
-각 문제 실행 시 자동으로 pull되지만, 사내 네트워크 속도가 느릴 경우 미리 받아두면 좋다.
-아래 명령으로 데이터셋의 50개 인스턴스에 해당하는 이미지를 한 번에 pull한다.
-
-```bash
-python3 - <<'EOF'
-import json, subprocess
-instances = [json.loads(l) for l in open("data/swebench_lite_test2.jsonl")]
-for inst in instances:
-    iid = inst["instance_id"].replace("__", "_1776_")
-    image = f"docker.io/swebench/sweb.eval.x86_64.{iid}:latest".lower()
-    print(f"Pulling {image} ...")
-    subprocess.run(["docker", "pull", image], check=False)
-EOF
-```
-
-사내 Docker Registry에 미러링이 필요한 경우 `swebench_internal.yaml`의 `environment` 섹션에 커스텀 레지스트리 주소를 추가한다.
+> 사내 Docker Registry에 미러링이 필요한 경우 `swebench_internal.yaml`의 `environment` 섹션에 커스텀 레지스트리 주소를 추가한다.
 
 ---
 
@@ -376,7 +375,7 @@ python -m swebench.harness.run_evaluation \
   --run_id my-model-eval
 ```
 
-### 6-3. 결과 확인
+### 6-4. 결과 확인
 
 채점 완료 후 `logs/run_evaluation/` 아래에 결과가 생성된다.
 

@@ -224,7 +224,32 @@ wc -l data/swebench_lite_test2.jsonl
 # 예상 출력: 50 data/swebench_lite_test2.jsonl
 ```
 
-### 4-4. SWE-bench Docker 이미지 사전 pull (선택)
+### 4-4. 평가 이미지에 CA 인증서 사전 설치 (사내 네트워크 필수)
+
+채점 단계(`swebench.harness.run_evaluation`)는 자체 Docker 컨테이너를 관리하며
+`swebench_internal.yaml`의 `env_startup_command`가 적용되지 않는다.
+따라서 채점 컨테이너 내부에서 HTTPS 요청(예: `httpbin.org`) 시 사내 CA를 신뢰하지 못해
+SSL 검증 실패로 테스트가 오류 처리된다.
+
+`scripts/prebuild_eval_images.sh`는 평가 이미지를 pull한 뒤 사내 CA 인증서를 포함한 레이어를 추가해
+동일 태그로 덮어씌운다. swebench는 이미지 이름만 참조하므로 코드 수정 없이 적용된다.
+
+```bash
+# setup_eval_env.sh 실행 후 수행 (CORP_CA_BUNDLE_PATH 필요)
+bash scripts/prebuild_eval_images.sh
+```
+
+옵션:
+
+| 옵션 | 설명 |
+|------|------|
+| `--dataset <path>` | 데이터셋 경로 지정 (기본: `data/swebench_lite_test2.jsonl`) |
+| `--dry-run` | 대상 이미지 목록만 출력하고 실제 빌드는 수행하지 않음 |
+
+> 이미 CA 레이어가 추가된 이미지는 자동으로 스킵된다 (`corp-ca-installed` Docker 라벨로 판별).
+> 이미지 업데이트나 CA 갱신 시 재실행하면 새 레이어로 교체된다.
+
+### 4-5. SWE-bench Docker 이미지 사전 pull (선택)
 
 각 문제 실행 시 자동으로 pull되지만, 사내 네트워크 속도가 느릴 경우 미리 받아두면 좋다.
 아래 명령으로 데이터셋의 50개 인스턴스에 해당하는 이미지를 한 번에 pull한다.
@@ -471,6 +496,7 @@ cat results/my-model/psf__requests-863/psf__requests-863.traj.json \
 | `src/minisweagent/config/benchmarks/swebench_internal.yaml` | 사내 LLM 엔드포인트 config 추가 | 사내 모델 연동 |
 | `scripts/download_swebench_lite.py` | URL 직접 다운로드 스크립트 추가 | SSL 우회(curl `--ssl-no-revoke`) 방식으로 데이터 확보 |
 | `scripts/generate_summary.py` | summary.json 생성 스크립트 추가 | 채점 결과 + 실행 궤적을 레퍼런스 포맷으로 통합 집계 |
+| `scripts/prebuild_eval_images.sh` | 평가 이미지 CA 인증서 사전 설치 스크립트 추가 | `run_evaluation` 컨테이너가 사내 CA 미신뢰로 HTTPS 요청 실패하는 문제 해결 |
 
 ### 핵심 코드 변경 (swebench.py)
 

@@ -96,9 +96,41 @@ bash scripts/setup_docker_proxy.sh
 > sudo 불필요. `~/.docker/config.json` 에 유저 레벨로 저장되며 최초 1회만 실행하면 된다.
 > 프록시 주소가 바뀐 경우 다시 실행한다.
 
-### 6. SWE-bench Docker 이미지 사전 pull (선택, 권장)
+### 6. 평가 이미지에 CA 인증서 사전 설치 (사내 네트워크 필수)
+
+채점 단계(`swebench run_evaluation`)는 자체 Docker 컨테이너를 관리하므로
+`swebench_internal.yaml` 의 `env_startup_command` 가 적용되지 않는다.
+따라서 컨테이너 내부에서 HTTPS 요청 시 사내 CA 를 신뢰하지 못해 SSL 오류가 발생한다.
+
+아래 스크립트가 평가 이미지를 pull 하고 사내 CA 인증서를 포함한 레이어를 추가해 동일 태그로 덮어씌운다.
+
+> **반드시 `source scripts/setup_eval_env.sh` 실행 후** 아래 명령을 실행한다.
+
+```bash
+bash scripts/prebuild_eval_images.sh
+```
+
+성공 시 출력 예시:
+
+```
+================================================================
+ prebuild_eval_images.sh 완료
+----------------------------------------------------------------
+ 성공 (빌드됨) : 50개
+ 스킵 (기존)   : 0개
+ 실패          : 0개
+ 합계          : 50개
+================================================================
+```
+
+> 이미지당 추가 레이어 빌드만 수행하므로 이미지 전체를 다시 다운로드하지 않는다.
+> 동일한 이미지에 이미 CA 가 설치되어 있으면 자동으로 스킵한다.
+> `--dry-run` 옵션으로 이미지 목록만 먼저 확인할 수 있다.
+
+### 7. SWE-bench Docker 이미지 사전 pull (선택, 권장)
 
 평가 실행 전에 필요한 이미지를 미리 받아두면 평가 중 네트워크 오류로 인한 실패를 예방할 수 있다.
+(Step 6의 `prebuild_eval_images.sh` 가 pull 을 자동으로 수행하므로 별도 실행은 필요 없을 수 있다.)
 
 ```bash
 python3 - <<'EOF'
@@ -115,7 +147,7 @@ EOF
 > Docker Hub 접근이 불가한 경우 사내 Docker Registry 에 이미지를 미러링해야 한다.
 > 미러링 후 `swebench_internal.yaml` 의 `environment.image` 에 내부 레지스트리 주소를 지정한다.
 
-### 7. 파일럿 실행 (5개 문제로 설정 검증)
+### 9. 파일럿 실행 (5개 문제로 설정 검증)
 
 ```bash
 mini-extra swebench \
@@ -134,7 +166,7 @@ tail -f results/pilot/minisweagent.log
 
 `[corp-setup] Corporate environment configured.` 메시지가 보이면 컨테이너 환경 설정 성공.
 
-### 8. 본 평가 실행 (50개 전체)
+### 10. 본 평가 실행 (50개 전체)
 
 ```bash
 mini-extra swebench \
@@ -147,7 +179,7 @@ mini-extra swebench \
 
 중단 후 재개 시 동일 명령을 재실행하면 완료된 문제는 건너뛴다.
 
-### 9. 채점
+### 11. 채점
 
 ```bash
 python -m swebench.harness.run_evaluation \
@@ -166,7 +198,7 @@ print(f'Resolved Rate: {resolved}/{total} ({resolved/total*100:.1f}%)')
 "
 ```
 
-### 10. summary.json 생성 (채점 후 실행)
+### 12. summary.json 생성 (채점 후 실행)
 
 채점 결과와 에이전트 실행 궤적을 합쳐 전체 평가 요약 파일을 생성한다.
 

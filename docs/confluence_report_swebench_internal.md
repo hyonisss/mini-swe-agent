@@ -219,6 +219,7 @@ run:
 | `72095bb8` | `environments/docker.py` | `run_args` 내 `${VAR}` 확장을 위한 `model_validator` 추가 | CA 경로 env var가 docker run 인자에 미치환 |
 | — | `run/benchmarks/swebench.py` | `process_instance()`에 `started_at`/`completed_at` 기록 추가 | traj.json 기반 정확한 e2e 시간 계산 |
 | — | `scripts/generate_summary.py` | summary.json 생성 스크립트 신규 추가 | 채점 결과 + 실행 궤적 통합 집계 리포트 생성 |
+| — | `scripts/prebuild_eval_images.sh` | CA 포함 이미지 사전 빌드 스크립트 신규 추가 | `run_evaluation` 컨테이너의 사내 CA 미신뢰로 HTTPS 요청 실패하는 문제 해결 |
 
 ### 4.2 주요 수정 상세
 
@@ -340,9 +341,25 @@ source scripts/setup_eval_env.sh
 ================================================================
 ```
 
-### 5.5 Docker 이미지 사전 pull (권장)
+### 5.5 평가 이미지에 CA 인증서 사전 설치 (사내 네트워크 필수)
+
+`swebench.harness.run_evaluation`은 자체 Docker 컨테이너를 관리하며 `swebench_internal.yaml`의
+`env_startup_command`가 적용되지 않는다. 따라서 채점 컨테이너 내부에서 HTTPS 요청 시 사내 CA를
+신뢰하지 못해 SSL 오류가 발생한다.
+
+`prebuild_eval_images.sh`가 평가 이미지를 pull하고 사내 CA 인증서 레이어를 추가해 동일 태그로 덮어씌운다.
+
+```bash
+# 반드시 source scripts/setup_eval_env.sh 실행 후 수행
+bash scripts/prebuild_eval_images.sh
+```
+
+> 이미 CA 레이어가 추가된 이미지는 자동 스킵된다 (Docker 라벨 `corp-ca-installed=true`).
+
+### 5.6 Docker 이미지 사전 pull (권장)
 
 50개 문제 각각에 대응하는 Docker 이미지를 미리 받아두면 평가 중 네트워크 오류를 예방할 수 있다.
+(`prebuild_eval_images.sh`가 pull도 자동 수행하므로 별도 실행은 필요 없을 수 있다.)
 
 ```bash
 python3 - <<'EOF'
@@ -506,6 +523,7 @@ cat results/my-model/exit_statuses_*.yaml
 | 5 | 비용 계산 예외로 로그 오염 | 사내 모델이 litellm DB 미등록 | `MSWEA_COST_TRACKING=ignore_errors` 설정 |
 | 6 | `source setup_eval_env.sh` 실행 중 셸 종료 | `set -euo pipefail` + pip 실패 | `set -euo pipefail` 제거, 개별 명령 에러 처리로 변경 |
 | 7 | `docker run_args` 의 `${VAR}` 미치환 | Pydantic 모델 생성 시점에 미확장 | `model_validator(mode="after")` 로 `run_args` expandvars 처리 |
+| 8 | 채점 컨테이너 내 HTTPS 요청 SSL 오류 (httpbin.org 등) | `run_evaluation`이 자체 컨테이너 관리 — `env_startup_command` 미적용으로 사내 CA 미설치 | `scripts/prebuild_eval_images.sh` 로 평가 이미지에 CA 레이어 사전 추가 |
 
 ---
 

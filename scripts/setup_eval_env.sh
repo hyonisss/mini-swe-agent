@@ -41,6 +41,12 @@ set -o allexport
 source "${ENV_FILE}" || { echo "[setup] ERROR: .env 로드 실패"; return 1 2>/dev/null || exit 1; }
 set +o allexport
 
+# mini-extra 임포트 시 ~/.config/mini-swe-agent/.env (글로벌 설정)가 자동 로드되어
+# 사내 환경변수와 충돌하는 문제를 방지.
+# MSWEA_GLOBAL_CONFIG_DIR 을 repo 루트로 지정하면 global_config_file = ${REPO_ROOT}/.env 가 되고,
+# 이미 allexport 로 로드된 상태이므로 load_dotenv 가 실질적으로 아무것도 덮어쓰지 않는다.
+export MSWEA_GLOBAL_CONFIG_DIR="${REPO_ROOT}"
+
 # ---------------------------------------------------------------------------
 # 2. 필수 변수 검사
 # ---------------------------------------------------------------------------
@@ -136,6 +142,7 @@ echo " SSL_CERT_FILE : ${SSL_CERT_FILE}"
 echo " pip 인덱스    : ${PIP_INDEX_URL}"
 echo " pip 신뢰호스트 : ${PIP_TRUSTED_HOST}"
 echo " 비용 추적     : ${MSWEA_COST_TRACKING}"
+echo " 글로벌 config : ${MSWEA_GLOBAL_CONFIG_DIR}/.env (기본 ~/.config 대신)"
 echo "----------------------------------------------------------------"
 echo " CA 번들은 호스트(litellm)와 Docker 컨테이너 양쪽에 적용됩니다."
 echo "----------------------------------------------------------------"

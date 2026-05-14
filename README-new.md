@@ -123,31 +123,12 @@ bash scripts/prebuild_eval_images.sh
 ================================================================
 ```
 
-> 이미지당 추가 레이어 빌드만 수행하므로 이미지 전체를 다시 다운로드하지 않는다.
+> 이미지 pull 후 CA 레이어를 추가하므로 pull과 CA 설치를 한 번에 수행한다.
 > 동일한 이미지에 이미 CA 가 설치되어 있으면 자동으로 스킵한다.
 > `--dry-run` 옵션으로 이미지 목록만 먼저 확인할 수 있다.
-
-### 7. SWE-bench Docker 이미지 사전 pull (선택, 권장)
-
-평가 실행 전에 필요한 이미지를 미리 받아두면 평가 중 네트워크 오류로 인한 실패를 예방할 수 있다.
-(Step 6의 `prebuild_eval_images.sh` 가 pull 을 자동으로 수행하므로 별도 실행은 필요 없을 수 있다.)
-
-```bash
-python3 - <<'EOF'
-import json, subprocess
-instances = [json.loads(l) for l in open("data/swebench_lite_test2.jsonl")]
-for inst in instances:
-    iid = inst["instance_id"].replace("__", "_1776_")
-    image = f"docker.io/swebench/sweb.eval.x86_64.{iid}:latest".lower()
-    print(f"Pulling {image} ...")
-    subprocess.run(["docker", "pull", image], check=False)
-EOF
-```
-
 > Docker Hub 접근이 불가한 경우 사내 Docker Registry 에 이미지를 미러링해야 한다.
-> 미러링 후 `swebench_internal.yaml` 의 `environment.image` 에 내부 레지스트리 주소를 지정한다.
 
-### 9. 파일럿 실행 (5개 문제로 설정 검증)
+### 7. 파일럿 실행 (5개 문제로 설정 검증)
 
 ```bash
 mini-extra swebench \
@@ -166,7 +147,7 @@ tail -f results/pilot/minisweagent.log
 
 `[corp-setup] Corporate environment configured.` 메시지가 보이면 컨테이너 환경 설정 성공.
 
-### 10. 본 평가 실행 (50개 전체)
+### 8. 본 평가 실행 (50개 전체)
 
 ```bash
 mini-extra swebench \
@@ -179,7 +160,7 @@ mini-extra swebench \
 
 중단 후 재개 시 동일 명령을 재실행하면 완료된 문제는 건너뛴다.
 
-### 11. 채점
+### 9. 채점
 
 ```bash
 python -m swebench.harness.run_evaluation \
@@ -198,7 +179,7 @@ print(f'Resolved Rate: {resolved}/{total} ({resolved/total*100:.1f}%)')
 "
 ```
 
-### 12. summary.json 생성 (채점 후 실행)
+### 10. summary.json 생성 (채점 후 실행)
 
 채점 결과와 에이전트 실행 궤적을 합쳐 전체 평가 요약 파일을 생성한다.
 

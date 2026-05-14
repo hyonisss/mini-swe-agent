@@ -176,12 +176,15 @@ python -m swebench.harness.run_evaluation \
 
 결과 확인:
 ```bash
-cat logs/run_evaluation/<model>.my-model-eval.json | python3 -c "
+cat <model>.my-model-eval.json | python3 -c "
 import json, sys; d = json.load(sys.stdin)
 resolved = len(d['resolved_ids']); total = d['total_instances']
 print(f'Resolved Rate: {resolved}/{total} ({resolved/total*100:.1f}%)')
 "
 ```
+
+> swebench 는 요약 `.json` 파일을 **현재 디렉터리**에 저장한다 (`<model_name_or_path>.<run_id>.json`).
+> 상세 로그(인스턴스별 `report.json`)는 `logs/run_evaluation/` 하위에 저장된다.
 
 ### 10. summary.json 생성 (채점 후 실행)
 
@@ -189,7 +192,7 @@ print(f'Resolved Rate: {resolved}/{total} ({resolved/total*100:.1f}%)')
 
 ```bash
 python scripts/generate_summary.py results/my-model \
-  --eval-results logs/run_evaluation \
+  --eval-results . \
   --run-id my-model-eval \
   --dataset data/swebench_lite_test2.jsonl
 ```

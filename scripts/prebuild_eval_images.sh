@@ -173,19 +173,31 @@ for i in "${!IMAGES[@]}"; do
         echo "[prebuild] 로컬에 이미 존재함, pull 스킵"
     fi
 
-    # 4-2. 이미 CA가 설치되어 있는지 확인 (라벨로 표시)
-    if docker image inspect "${img}" --format '{{index .Config.Labels "corp-ca-installed"}}' 2>/dev/null | grep -q "true"; then
-        echo "[prebuild] CA 이미 설치됨, 스킵합니다."
+    # 4-2. 이미 CA + 프록시가 설치되어 있는지 확인 (라벨로 표시)
+    _ca=$(docker image inspect "${img}" --format '{{index .Config.Labels "corp-ca-installed"}}' 2>/dev/null)
+    _proxy=$(docker image inspect "${img}" --format '{{index .Config.Labels "corp-proxy-injected"}}' 2>/dev/null)
+    if [[ "${_ca}" == "true" && "${_proxy}" == "true" ]]; then
+        echo "[prebuild] CA + 프록시 이미 설치됨, 스킵합니다."
         SKIP=$((SKIP + 1))
         continue
     fi
 
     # 4-3. Dockerfile 생성
+    # ${HTTP_PROXY} 등은 heredoc 처리 시 bash 가 실제 값으로 치환됨
+    # (source setup_eval_env.sh 실행 후 유효)
+    # HTTP_PROXY / http_proxy 대소문자 모두 설정해 모든 HTTP 클라이언트가 인식하게 함
     cat > "${BUILD_DIR}/Dockerfile" << DOCKERFILE
 FROM ${img}
 COPY corp-ca.pem /usr/local/share/ca-certificates/corp-ca.crt
 RUN update-ca-certificates 2>/dev/null || true
-LABEL corp-ca-installed="true"
+ENV HTTP_PROXY="${HTTP_PROXY}" \
+    HTTPS_PROXY="${HTTPS_PROXY}" \
+    NO_PROXY="${NO_PROXY}" \
+    http_proxy="${HTTP_PROXY}" \
+    https_proxy="${HTTPS_PROXY}" \
+    no_proxy="${NO_PROXY}"
+LABEL corp-ca-installed="true" \
+      corp-proxy-injected="true"
 DOCKERFILE
 
     # 4-4. 빌드 (같은 태그로 덮어쓰기)

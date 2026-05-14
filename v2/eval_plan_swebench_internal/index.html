@@ -2662,17 +2662,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#4-5-swe-bench-docker-pull" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        4-5. SWE-bench Docker 이미지 사전 pull (선택)
-      
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -2785,10 +2774,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#6-3_1" class="md-nav__link">
+  <a href="#6-4" class="md-nav__link">
     <span class="md-ellipsis">
       
-        6-3. 결과 확인
+        6-4. 결과 확인
       
     </span>
   </a>
@@ -3197,7 +3186,15 @@ PASS_TO_PASS       : 기존 통과 상태를 유지해야 하는 테스트
 - <code>.venv/</code> 생성 및 활성화 완료
 - <code>pip install -e .</code> (mini-swe-agent) 완료
 - <code>pip install swebench</code> (채점 도구) 완료</p>
-<p><strong>Step C: 새 터미널 세션에서 재활성화</strong></p>
+<p><strong>Step C: Docker 클라이언트 프록시 설정 (최초 1회)</strong></p>
+<p>채점(<code>run_evaluation</code>) 컨테이너에 프록시를 자동 주입한다.</p>
+<div class="highlight"><pre><span></span><code>bash<span class="w"> </span>scripts/setup_docker_proxy.sh
+</code></pre></div>
+<p><strong>Step D: 평가 이미지에 CA 인증서 설치 (최초 1회, 이미지 갱신 시 재실행)</strong></p>
+<p>채점 컨테이너에 사내 CA를 신뢰하게 한다. 이미지 pull도 이 단계에서 함께 수행된다.</p>
+<div class="highlight"><pre><span></span><code>bash<span class="w"> </span>scripts/prebuild_eval_images.sh
+</code></pre></div>
+<p><strong>Step E: 새 터미널 세션에서 재활성화</strong></p>
 <p>새 터미널을 열 때마다 다시 실행한다:</p>
 <div class="highlight"><pre><span></span><code><span class="nb">source</span><span class="w"> </span>scripts/setup_eval_env.sh
 </code></pre></div>
@@ -3248,7 +3245,7 @@ bash<span class="w"> </span>scripts/prebuild_eval_images.sh
 <tbody>
 <tr>
 <td><code>--dataset &lt;path&gt;</code></td>
-<td>데이터셋 경로 지정 (기본: <code>data/swebench_lite_test2.jsonl</code>)</td>
+<td>특정 JSONL 파일 지정 (여러 번 사용 가능). 미지정 시 <code>data/*.jsonl</code> 전체 자동 탐색</td>
 </tr>
 <tr>
 <td><code>--dry-run</code></td>
@@ -3257,23 +3254,11 @@ bash<span class="w"> </span>scripts/prebuild_eval_images.sh
 </tbody>
 </table>
 <blockquote>
-<p>이미 CA 레이어가 추가된 이미지는 자동으로 스킵된다 (<code>corp-ca-installed</code> Docker 라벨로 판별).
-이미지 업데이트나 CA 갱신 시 재실행하면 새 레이어로 교체된다.</p>
+<p>이미지 pull과 CA 설치를 한 번에 수행한다. 이미지 사전 pull은 별도로 실행할 필요 없다.
+이미 CA 레이어가 추가된 이미지는 자동으로 스킵된다 (<code>corp-ca-installed</code> Docker 라벨로 판별).
+이미지 업데이트나 CA 갱신 시 재실행하면 새 레이어로 교체된다.
+사내 Docker Registry에 미러링이 필요한 경우 <code>swebench_internal.yaml</code>의 <code>environment</code> 섹션에 커스텀 레지스트리 주소를 추가한다.</p>
 </blockquote>
-<h3 id="4-5-swe-bench-docker-pull">4-5. SWE-bench Docker 이미지 사전 pull (선택)</h3>
-<p>각 문제 실행 시 자동으로 pull되지만, 사내 네트워크 속도가 느릴 경우 미리 받아두면 좋다.
-아래 명령으로 데이터셋의 50개 인스턴스에 해당하는 이미지를 한 번에 pull한다.</p>
-<div class="highlight"><pre><span></span><code>python3<span class="w"> </span>-<span class="w"> </span><span class="s">&lt;&lt;'EOF'</span>
-<span class="s">import json, subprocess</span>
-<span class="s">instances = [json.loads(l) for l in open("data/swebench_lite_test2.jsonl")]</span>
-<span class="s">for inst in instances:</span>
-<span class="s">    iid = inst["instance_id"].replace("__", "_1776_")</span>
-<span class="s">    image = f"docker.io/swebench/sweb.eval.x86_64.{iid}:latest".lower()</span>
-<span class="s">    print(f"Pulling {image} ...")</span>
-<span class="s">    subprocess.run(["docker", "pull", image], check=False)</span>
-<span class="s">EOF</span>
-</code></pre></div>
-<p>사내 Docker Registry에 미러링이 필요한 경우 <code>swebench_internal.yaml</code>의 <code>environment</code> 섹션에 커스텀 레지스트리 주소를 추가한다.</p>
 <hr>
 <h2 id="5">5. 평가 실행</h2>
 <h3 id="5-1">5-1. 소규모 검증 (권장 — 본 실행 전)</h3>
@@ -3374,7 +3359,7 @@ bash<span class="w"> </span>scripts/setup_docker_proxy.sh
 <span class="w">  </span>--max_workers<span class="w"> </span><span class="m">4</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--run_id<span class="w"> </span>my-model-eval
 </code></pre></div>
-<h3 id="6-3_1">6-3. 결과 확인</h3>
+<h3 id="6-4">6-4. 결과 확인</h3>
 <p>채점 완료 후 <code>logs/run_evaluation/</code> 아래에 결과가 생성된다.</p>
 <div class="highlight"><pre><span></span><code>logs/run_evaluation/
 ├── &lt;model&gt;.&lt;run_id&gt;.json          ← 전체 요약 (resolved_ids, total_instances, ...)

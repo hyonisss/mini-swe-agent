@@ -2762,17 +2762,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#56-docker-pull" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        5.6 Docker 이미지 사전 pull (권장)
-      
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -2885,10 +2874,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#74_1" class="md-nav__link">
+  <a href="#75" class="md-nav__link">
     <span class="md-ellipsis">
       
-        7.4 오답 케이스 분석
+        7.5 오답 케이스 분석
       
     </span>
   </a>
@@ -3157,6 +3146,14 @@ source scripts/setup_eval_env.sh
  │  ├─ HTTP_PROXY / HTTPS_PROXY / NO_PROXY
  │  └─ MSWEA_COST_TRACKING=ignore_errors  ← 미등록 모델 비용 계산 오류 억제
  ▼
+bash scripts/setup_docker_proxy.sh   (최초 1회)
+ │  ~/.docker/config.json 에 프록시 설정
+ │  → 이후 모든 Docker 컨테이너에 HTTP_PROXY 자동 주입
+ ▼
+bash scripts/prebuild_eval_images.sh  (최초 1회, 이미지 갱신 시 재실행)
+ │  평가 이미지를 pull + 사내 CA 레이어 추가 → 동일 태그로 덮어씌움
+ │  → 채점(run_evaluation) 컨테이너가 사내 CA를 신뢰
+ ▼
 mini-extra swebench 실행
  │
  ▼
@@ -3421,26 +3418,16 @@ pip<span class="w"> </span>install<span class="w"> </span>--cert<span class="w">
 <p><code>swebench.harness.run_evaluation</code>은 자체 Docker 컨테이너를 관리하며 <code>swebench_internal.yaml</code>의
 <code>env_startup_command</code>가 적용되지 않는다. 따라서 채점 컨테이너 내부에서 HTTPS 요청 시 사내 CA를
 신뢰하지 못해 SSL 오류가 발생한다.</p>
-<p><code>prebuild_eval_images.sh</code>가 평가 이미지를 pull하고 사내 CA 인증서 레이어를 추가해 동일 태그로 덮어씌운다.</p>
+<p><code>prebuild_eval_images.sh</code>가 평가 이미지를 pull하고 사내 CA 인증서 레이어를 추가해 동일 태그로 덮어씌운다.
+이미지 pull과 CA 설치를 한 번에 처리하므로 별도의 이미지 사전 pull은 필요 없다.</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># 반드시 source scripts/setup_eval_env.sh 실행 후 수행</span>
 bash<span class="w"> </span>scripts/prebuild_eval_images.sh
 </code></pre></div>
 <blockquote>
-<p>이미 CA 레이어가 추가된 이미지는 자동 스킵된다 (Docker 라벨 <code>corp-ca-installed=true</code>).</p>
+<p><code>data/*.jsonl</code> 파일을 자동 탐색하여 필요한 이미지 목록을 결정한다. 데이터셋 파일이 추가되어도 스크립트 수정 없이 자동 반영된다.
+이미 CA 레이어가 추가된 이미지는 자동 스킵된다 (Docker 라벨 <code>corp-ca-installed=true</code>).
+이미지 업데이트나 CA 갱신 시 재실행하면 새 레이어로 교체된다.</p>
 </blockquote>
-<h3 id="56-docker-pull">5.6 Docker 이미지 사전 pull (권장)</h3>
-<p>50개 문제 각각에 대응하는 Docker 이미지를 미리 받아두면 평가 중 네트워크 오류를 예방할 수 있다.
-(<code>prebuild_eval_images.sh</code>가 pull도 자동 수행하므로 별도 실행은 필요 없을 수 있다.)</p>
-<div class="highlight"><pre><span></span><code>python3<span class="w"> </span>-<span class="w"> </span><span class="s">&lt;&lt;'EOF'</span>
-<span class="s">import json, subprocess</span>
-<span class="s">instances = [json.loads(l) for l in open("data/swebench_lite_test2.jsonl")]</span>
-<span class="s">for inst in instances:</span>
-<span class="s">    iid = inst["instance_id"].replace("__", "_1776_")</span>
-<span class="s">    image = f"docker.io/swebench/sweb.eval.x86_64.{iid}:latest".lower()</span>
-<span class="s">    print(f"Pulling {image} ...")</span>
-<span class="s">    subprocess.run(["docker", "pull", image], check=False)</span>
-<span class="s">EOF</span>
-</code></pre></div>
 <hr>
 <h2 id="6">6. 평가 실행</h2>
 <h3 id="61-5">6.1 파일럿 실행 (5개 문제로 설정 검증)</h3>
@@ -3537,7 +3524,7 @@ logs/run_evaluation/
         └── &lt;instance_id&gt;/
             └── report.json                ← 인스턴스별 테스트 결과
 </code></pre></div>
-<h3 id="74_1">7.4 오답 케이스 분석</h3>
+<h3 id="75">7.5 오답 케이스 분석</h3>
 <div class="highlight"><pre><span></span><code><span class="c1"># 특정 인스턴스 제출 패치 확인</span>
 cat<span class="w"> </span>results/my-model/&lt;instance_id&gt;/&lt;instance_id&gt;.traj.json<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">"import json,sys; d=json.load(sys.stdin); print(d['info']['submission'])"</span>
